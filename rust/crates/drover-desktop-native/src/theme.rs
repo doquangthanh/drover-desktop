@@ -33,6 +33,10 @@ pub fn tint(color: u32, alpha: f32) -> Rgba {
 }
 
 pub const UI_FONT: &str = "Geist";
+/// Terminal font while the daemon knows none: what the web UI's `ui-monospace, monospace` gives on each OS.
+/// "monospace" is a fontconfig alias, unknown to DirectWrite / Core Text.
+pub const DEFAULT_TERMINAL_FONT: &str =
+    if cfg!(windows) { "Consolas" } else if cfg!(target_os = "macos") { "Menlo" } else { "monospace" };
 pub const AVATAR: [u32; 8] = [0x24877b, 0xb9602f, 0x4e7fe0, 0x7a5fd6, 0x2f8a4a, 0xb2456b, 0x8a7a2b, 0x3d7f99];
 
 /// Agent badge: letter, background, foreground (`kind-icon.tsx`).

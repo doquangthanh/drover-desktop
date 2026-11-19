@@ -60,7 +60,7 @@ impl DroverApp {
             }
         })
         .detach();
-        let family = std::env::var("DROVER_NATIVE_FONT").unwrap_or_else(|_| "monospace".into());
+        let family = std::env::var("DROVER_NATIVE_FONT").unwrap_or_else(|_| theme::DEFAULT_TERMINAL_FONT.into());
         DroverApp { client, store: Store::default(), screens: Arc::default(), space: None, tab: None, connected: false,
                     status: "connecting…".into(), term_font: TermFont::new(&family, 13.0), switched_at: Arc::default(), last_switch: None,
                     focused: None, term_focus: cx.focus_handle(), marked: None, cursor_bounds: Arc::default(),
