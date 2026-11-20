@@ -1,0 +1,49 @@
+name: release
+
+# A tag like v0.2.0 (after drover-core has the same tag) publishes drover-native-<os>-<arch>[.exe] and its .sha256.
+# drover-core's assemble-bundle.yml puts it in the bundle next to dr.
+on:
+  push: { tags: ["v*"] }
+  workflow_dispatch:
+
+permissions: { contents: write }
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-22.04, bin: drover-native, asset: drover-native-linux-x64 }
+          - { runner: ubuntu-24.04-arm, bin: drover-native, asset: drover-native-linux-arm64 }
+          - { runner: windows-2022, bin: drover-native.exe, asset: drover-native-windows-x64.exe }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Same protocol as the bundle: drover-core must be at this tag"
+        shell: bash
+        run: grep -q "tag = \"${GITHUB_REF_NAME}\"" rust/crates/drover-desktop-native/Cargo.toml || { echo "set the drover-core tag in rust/crates/drover-desktop-native/Cargo.toml to ${GITHUB_REF_NAME}" >&2; exit 1; }
+        if: startsWith(github.ref, 'refs/tags/v')
+      - name: System libraries for GPUI
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libxcb1-dev libfontconfig1-dev libfreetype-dev libvulkan-dev
+      - name: Rust toolchain
+        shell: bash
+        run: rustup show active-toolchain || rustup toolchain install
+        working-directory: rust
+      - run: cargo build --release --locked -p drover-desktop-native
+        working-directory: rust
+      - name: Package
+        shell: bash
+        run: |
+          cp "rust/target/release/${{ matrix.bin }}" "${{ matrix.asset }}"
+          sha256sum "${{ matrix.asset }}" > "${{ matrix.asset }}.sha256"
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            ${{ matrix.asset }}
+            ${{ matrix.asset }}.sha256
