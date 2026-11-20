@@ -262,9 +262,15 @@ impl DroverApp {
 
     pub fn select_space(&mut self, id: String, cx: &mut Context<Self>) {
         self.mark_switch();
+        self.view = View::Terminals;
+        self.want_term_focus = true;
         self.space = Some(id);
         self.tab = None;
         self.keep_selection_valid();
+        // Keys go to the space's focused pane, and the daemon marks it as seen.
+        if let Some(pane) = self.focused.clone() {
+            self.rpc("pane.focus", serde_json::json!({"pane": pane}));
+        }
         cx.notify();
     }
 

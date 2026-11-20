@@ -72,7 +72,13 @@ pub fn refresh(app: &mut DroverApp) {
 }
 
 impl DroverApp {
-    pub fn pick_agent(&mut self, id: String, cx: &mut Context<Self>) {
+    /// Select an agent. Beside the terminals (the panel) it also takes you to that agent: its tab, keys, read mark.
+    /// In the full Agents view it only selects, to inspect it (the inspector has Open).
+    pub fn pick_agent(&mut self, id: String, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        if self.view == crate::views::View::Terminals {
+            self.show_pane(&id);
+            window.focus(&self.term_focus);
+        }
         self.agents.selected = Some(id);
         cx.notify();
     }

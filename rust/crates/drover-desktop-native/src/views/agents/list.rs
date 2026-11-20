@@ -36,7 +36,7 @@ fn row(app: &DroverApp, r: &TreeRow, p: &Pane, on: bool, cx: &mut Context<Drover
     let _ = app;
     let mut line = div().h(px(40.)).flex_none().flex().items_center().pr(px(8.)).rounded(px(7.))
         .when(on, |d| d.bg(theme::selected())).when(!on, |d| d.hover(|d| d.bg(theme::hover())))
-        .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.pick_agent(id.clone(), cx)));
+        .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| app.pick_agent(id.clone(), window, cx)));
     for g in &r.guides {
         line = line.child(guide(*g));
     }
