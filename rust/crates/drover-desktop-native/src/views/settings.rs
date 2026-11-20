@@ -12,10 +12,10 @@ use crate::views::ui::{self, Kind};
 use crate::workspace_app::DroverApp;
 
 /// Label, file, section marker (shown as a hint).
-const SECTIONS: [(&str, &str, &str); 8] = [
+const SECTIONS: [(&str, &str, &str); 9] = [
     ("General", "settings.toml", ""), ("Appearance", "settings.toml", "theme"), ("Notifications", "settings.toml", "[notify]"), ("Keyboard", "keys.toml", ""),
     ("Machines", "machines.toml", ""), ("Agent policy", "settings.toml", "[orchestration]"),
-    ("Notes for agents", "AGENTS.md", ""), ("Updates", "", ""),
+    ("Notes for agents", "AGENTS.md", ""), ("Updates", "", ""), ("Server", "", ""),
 ];
 
 #[derive(Default)]
@@ -24,6 +24,8 @@ pub struct SettingsState {
     /// `settings.files`: {dir, files: [{name, path, exists, text}], errors}.
     pub files: Option<Result<Value, String>>,
     pub update: Option<Result<Value, String>>,
+    /// `server.info`, loaded when the Server section is open.
+    pub server: Option<Result<Value, String>>,
     loading: bool,
 }
 
@@ -38,6 +40,9 @@ pub fn refresh(app: &mut DroverApp) {
     if SECTIONS[app.settings.section].0 == "Updates" && app.settings.update.is_none() {
         app.settings.update = Some(Err("Checking…".into()));
         app.rpc_reply("update.check", json!({}), |app, r| app.settings.update = Some(r));
+    }
+    if SECTIONS[app.settings.section].0 == "Server" {
+        crate::views::settings_server::refresh(app);
     }
 }
 
@@ -123,8 +128,8 @@ pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
             .child(div().text_color(rgb(dim())).child(format!("{dir} · plain files, reloads on save")))
             .child(div().flex().gap(px(6.))
                 .child(ui::button("Open folder", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |_, _, _, _| open_in_browser(&open_dir))))
-                .child(ui::button("Reload", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.settings.files = None; cx.notify(); })))));
+                .child(ui::button("Reload", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.settings.files = None; app.settings.server = None; cx.notify(); })))));
     let (label, file, marker) = SECTIONS[app.settings.section];
-    let right = if label == "Updates" { updates(app, cx) } else if label == "Appearance" { crate::views::settings_look::panel(app, cx) } else { file_section(app, &data, file, marker, cx) };
+    let right = if label == "Updates" { updates(app, cx) } else if label == "Server" { crate::views::settings_server::panel(app, cx) } else if label == "Appearance" { crate::views::settings_look::panel(app, cx) } else { file_section(app, &data, file, marker, cx) };
     ui::split(220., left, right)
 }

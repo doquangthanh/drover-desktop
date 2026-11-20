@@ -30,6 +30,7 @@ pub enum Then {
     StopSubtree(String),
     RemoveMachine(String),
     UpdateApply(String),
+    StopServer,
 }
 
 /// What to do with an rpc reply when it arrives (checked by the drain loop).
@@ -202,6 +203,7 @@ impl DroverApp {
                 Then::CloseSpace(id) => self.rpc("space.remove", json!({"space": id})),
                 Then::StopSubtree(id) => self.rpc("pane.close", json!({"pane": id, "subtree": true})),
                 Then::RemoveMachine(alias) => self.rpc("machine.remove", json!({"alias": alias})),
+                Then::StopServer => self.rpc("server.stop", json!({})),
                 Then::UpdateApply(tag) => {
                     self.settings.update = Some(Err("Updating: the server restarts…".into()));
                     self.rpc_reply("update.apply", json!({"tag": tag}), |app, r| {
