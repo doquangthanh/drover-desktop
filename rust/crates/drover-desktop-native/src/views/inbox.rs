@@ -3,7 +3,8 @@
 //! (`inbox-side-panel.tsx`) with what a notification looks like and which events notify you.
 
 use drover_proto::wire::Pane;
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 use serde_json::{Value, json};
 
 use crate::theme::{self, blocked, dim, fg, muted, working, tint};

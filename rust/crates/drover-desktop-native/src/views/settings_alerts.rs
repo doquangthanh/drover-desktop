@@ -1,7 +1,8 @@
 //! Settings → Notifications, the controls (Herdr's "Alerts"): per event which channels notify you, and quiet hours.
 //! They edit `[notify]` in settings.toml in place (comments and other lines stay) and save it with `settings.write`.
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 use serde_json::{Value, json};
 
 use crate::theme::{self, dim, fg, muted};

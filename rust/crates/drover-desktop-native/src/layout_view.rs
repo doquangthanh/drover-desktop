@@ -5,9 +5,8 @@
 use alacritty_terminal::grid::Dimensions;
 use drover_proto::client::Command;
 use drover_proto::wire::{Dir, Node};
-use gpui::{
-    AnyElement, Bounds, Context, Div, ElementInputHandler, MouseButton, Pixels, canvas, div, prelude::*, px, relative, rgb,
-};
+use gpui::{AnyElement, Bounds, Context, Div, ElementInputHandler, MouseButton, Pixels, canvas, div, prelude::*, relative, rgb};
+use crate::ui_scale::px;
 use serde_json::json;
 
 use crate::terminal_paint;

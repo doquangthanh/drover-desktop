@@ -1,7 +1,8 @@
 //! The pop-up of Ctrl+P (jump to a terminal), Ctrl+Shift+P / F1 (all commands), F2 (rename) and Ctrl+F (find in the
 //! focused terminal, find.rs), as the web UI's palette: a field on top, a list under it; ↑↓ pick, Enter runs, Esc closes.
 
-use gpui::{Context, Div, Entity, Focusable, FontWeight, KeyDownEvent, MouseButton, Window, div, prelude::*, px, rgb, rgba};
+use gpui::{Context, Div, Entity, Focusable, FontWeight, KeyDownEvent, MouseButton, Window, div, prelude::*, rgb, rgba};
+use crate::ui_scale::px;
 use serde_json::json;
 
 use crate::theme::{self, accent, dim, fg, muted, UI_FONT};
@@ -21,10 +22,10 @@ pub enum Kind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cmd {
     NewTab, CloseTab, NextTab, PrevTab, SplitRight, SplitDown, ClosePane, Zoom, Sidebar,
-    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Jump, Rename, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll,
+    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Jump, Rename, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll, AppZoomIn, AppZoomOut, AppZoomReset, WhatsNew, Feedback,
 }
 
-const COMMANDS: [(&str, &str, Cmd); 27] = [
+const COMMANDS: [(&str, &str, Cmd); 32] = [
     ("New tab", "Ctrl+N", Cmd::NewTab), ("Close tab", "Ctrl+W", Cmd::CloseTab), ("Next tab", "Ctrl+Tab", Cmd::NextTab),
     ("Previous tab", "Ctrl+Shift+Tab", Cmd::PrevTab), ("Split right", "Ctrl+\\", Cmd::SplitRight),
     ("Split down", "Ctrl+K Ctrl+\\", Cmd::SplitDown), ("Close pane", "Ctrl+K W", Cmd::ClosePane), ("Zoom pane", "Ctrl+K Ctrl+M", Cmd::Zoom),
@@ -36,6 +37,9 @@ const COMMANDS: [(&str, &str, Cmd); 27] = [
     ("Bring back settled tabs", "", Cmd::UnsettleTabs), ("Terminal text bigger", "Ctrl+=", Cmd::ZoomIn),
     ("Terminal text smaller", "Ctrl+-", Cmd::ZoomOut), ("Terminal text normal size", "Ctrl+0", Cmd::ZoomReset),
     ("Select all in terminal", "", Cmd::SelectAll),
+    ("Interface bigger", "Ctrl+Alt+=", Cmd::AppZoomIn), ("Interface smaller", "Ctrl+Alt+-", Cmd::AppZoomOut),
+    ("Interface normal size", "Ctrl+Alt+0", Cmd::AppZoomReset),
+    ("What's new", "", Cmd::WhatsNew), ("Send feedback", "", Cmd::Feedback),
 ];
 
 pub struct Picker {
@@ -162,6 +166,8 @@ impl DroverApp {
             Cmd::Inbox => self.set_view(View::Inbox, window, cx),
             Cmd::Machines => self.set_view(View::Machines, window, cx),
             Cmd::Settings => self.set_view(View::Settings, window, cx),
+            Cmd::WhatsNew => self.set_view(View::WhatsNew, window, cx),
+            Cmd::Feedback => self.set_view(View::Feedback, window, cx),
             Cmd::NextBlocked => self.next_with_state("blocked", window, cx),
             Cmd::NextDone => self.next_with_state("done", window, cx),
             Cmd::Shortcuts => self.show_shortcuts = true,
@@ -170,6 +176,9 @@ impl DroverApp {
             Cmd::Find => self.open_picker(Kind::Find, window, cx),
             Cmd::SettleTab => self.settle_current_tab(cx),
             Cmd::UnsettleTabs => self.unsettle_all(cx),
+            Cmd::AppZoomIn => self.zoom_app(1, cx),
+            Cmd::AppZoomOut => self.zoom_app(-1, cx),
+            Cmd::AppZoomReset => self.zoom_app(0, cx),
             Cmd::ZoomIn => self.zoom_terminal(1.0),
             Cmd::ZoomOut => self.zoom_terminal(-1.0),
             Cmd::ZoomReset => self.zoom_terminal(0.0),

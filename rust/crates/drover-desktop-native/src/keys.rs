@@ -10,11 +10,11 @@ use crate::views::View;
 use crate::workspace_app::DroverApp;
 
 /// Shown by Ctrl+K Ctrl+S (dialogs.rs).
-pub const SHORTCUTS: [(&str, &str); 27] = [
+pub const SHORTCUTS: [(&str, &str); 28] = [
     ("Ctrl+Shift+P · F1", "All commands"), ("Ctrl+P", "Jump to a terminal or agent"), ("F2", "Rename the focused agent"),
     ("Ctrl+F", "Find in the focused terminal"),
     ("Ctrl+B", "Toggle sidebar"), ("Ctrl+,", "Settings"), ("Ctrl+K Ctrl+S", "Keyboard shortcuts"),
-    ("Ctrl+= · Ctrl+- · Ctrl+0", "Terminal text bigger · smaller · normal"), ("Ctrl+N · Ctrl+Shift+`", "New tab"), ("Ctrl+W", "Close tab"), ("Ctrl+Tab · Ctrl+PageDown", "Next tab"),
+    ("Ctrl+= · Ctrl+- · Ctrl+0", "Terminal text bigger · smaller · normal"), ("Ctrl+Alt+= · Ctrl+Alt+- · Ctrl+Alt+0", "Interface bigger · smaller · normal"), ("Ctrl+N · Ctrl+Shift+`", "New tab"), ("Ctrl+W", "Close tab"), ("Ctrl+Tab · Ctrl+PageDown", "Next tab"),
     ("Ctrl+Shift+Tab · Ctrl+PageUp", "Previous tab"), ("Alt+1–9", "Go to tab 1–9"),
     ("Ctrl+\\ · Ctrl+Shift+5", "Split right"), ("Ctrl+K Ctrl+\\", "Split down"), ("Ctrl+K W", "Close pane"),
     ("Ctrl+1–9", "Focus pane 1–9"), ("Ctrl+K Ctrl+←↑↓→", "Focus pane by direction"), ("Ctrl+K ← →", "Swap with previous / next pane"),
@@ -52,6 +52,9 @@ impl DroverApp {
             (_, true, _, "f8") => self.next_with_state("done", window, cx),
             (false, false, true, _) if digit.is_some() => self.go_to_tab(digit.unwrap_or(1) - 1, cx),
             (true, false, false, _) if digit.is_some() => self.go_to_pane(digit.unwrap_or(1) - 1, window, cx),
+            (true, _, true, "=" | "+") => self.zoom_app(1, cx),
+            (true, _, true, "-" | "_") => self.zoom_app(-1, cx),
+            (true, _, true, "0") => self.zoom_app(0, cx),
             (true, _, false, "=" | "+") => self.zoom_terminal(1.0),
             (true, false, false, "-" | "_") => self.zoom_terminal(-1.0),
             (true, false, false, "0") => self.zoom_terminal(0.0),

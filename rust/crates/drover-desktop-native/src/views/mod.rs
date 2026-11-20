@@ -4,6 +4,7 @@
 
 pub mod agents;
 pub mod changes;
+pub mod feedback;
 pub mod files;
 pub mod inbox;
 pub mod machines;
@@ -15,6 +16,7 @@ pub mod settings_rules;
 pub mod settings_server;
 pub mod text_input;
 pub mod ui;
+pub mod whats_new;
 
 use gpui::{Context, Div, MouseButton, Window, div, prelude::*};
 
@@ -31,6 +33,8 @@ pub enum View {
     Inbox,
     Settings,
     Machines,
+    WhatsNew,
+    Feedback,
 }
 
 impl View {
@@ -43,6 +47,8 @@ impl View {
             View::Inbox => "Inbox",
             View::Settings => "Settings",
             View::Machines => "Machines",
+            View::WhatsNew => "What's new",
+            View::Feedback => "Feedback",
         }
     }
 
@@ -55,6 +61,8 @@ impl View {
             View::Inbox => "inbox",
             View::Settings => "gear",
             View::Machines => "server",
+            View::WhatsNew => "info",
+            View::Feedback => "more",
         }
     }
 
@@ -73,6 +81,7 @@ impl View {
             View::Inbox => "inbox",
             View::Settings => "settings",
             View::Machines => "machines",
+            View::WhatsNew | View::Feedback => "",
         }
     }
 }
@@ -98,7 +107,7 @@ pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let view = app.view;
     let web = div().child(ui::button("Open in browser", Kind::Plain))
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, _| app.open_web(view.web())));
-    let head = ui::header(view.icon(), view.title()).child(web);
+    let head = ui::header(view.icon(), view.title()).when(!view.web().is_empty(), |d| d.child(web));
     let content = match view {
         View::Agents => agents::body(app, cx),
         View::Changes => changes::panel_body(app, cx),
@@ -106,6 +115,8 @@ pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         View::Inbox => inbox::body(app, cx),
         View::Settings => settings::body(app, cx),
         View::Machines => machines::body(app, cx),
+        View::WhatsNew => whats_new::body(app, cx),
+        View::Feedback => feedback::body(app, cx),
         _ => ui::note(format!("{} is not drawn here yet.", view.title()), false),
     };
     div().flex().flex_col().flex_1().min_h_0().min_w_0().child(head).child(content)

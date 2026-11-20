@@ -18,6 +18,7 @@ mod terminal_paint;
 mod terminal_selection;
 mod theme;
 mod toasts;
+mod ui_scale;
 mod topbar;
 mod views;
 mod widgets;
@@ -28,6 +29,7 @@ use gpui::{App, Application, Bounds, TitlebarOptions, WindowBounds, WindowOption
 use workspace_app::DroverApp;
 
 fn main() {
+    ui_scale::init();
     Application::new().with_assets(assets::Assets).run(|cx: &mut App| {
         assets::load_fonts(cx);
         let bounds = Bounds::centered(None, size(px(1500.), px(900.)), cx);

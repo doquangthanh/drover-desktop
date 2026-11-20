@@ -1,7 +1,8 @@
 //! Settings → Appearance (Herdr's "Look"): pick the theme. The choice is saved as `theme = "…"` at the top of
 //! settings.toml (comments and other lines stay) and applied at once; the daemon reports it to every window.
 
-use gpui::{Context, Div, Entity, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, Entity, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 use serde_json::json;
 
 use crate::font_prefs::{self, OwnFont};
@@ -128,6 +129,13 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .child(row)
         .child(div().text_size(px(12.)).text_color(rgb(theme::dim()))
             .child("Saved as theme = \"…\" in settings.toml. Terminal text size: Ctrl+= / Ctrl+- / Ctrl+0."))
+        .child(head("INTERFACE SIZE (THIS DEVICE)"))
+        .child(div().flex().items_center().gap(px(8.))
+            .child(ui::button("−", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.zoom_app(-1, cx))))
+            .child(div().w(px(48.)).flex().justify_center().text_color(rgb(theme::fg())).child(format!("{}%", crate::ui_scale::percent())))
+            .child(ui::button("+", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.zoom_app(1, cx))))
+            .child(ui::button("100%", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.zoom_app(0, cx))))
+            .child(div().text_size(px(12.)).text_color(rgb(theme::dim())).child("Ctrl+Alt+= / - / 0. Terminal text has its own size (Ctrl+= / - / 0).")))
         .child(head("TERMINAL FONT (THIS DEVICE)"))
         .child(div().flex().items_center().gap(px(8.))
             .child(div().flex_1().child(f.family.clone())).child(div().w(px(80.)).child(f.size.clone()))

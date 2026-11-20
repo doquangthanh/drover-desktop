@@ -6,10 +6,8 @@
 
 use std::ops::Range;
 
-use gpui::{
-    App, Bounds, Context, ElementInputHandler, EventEmitter, FocusHandle, Focusable, KeyDownEvent, MouseButton, Pixels,
-    ScrollHandle, SharedString, UTF16Selection, Window, canvas, div, prelude::*, px, rgb,
-};
+use gpui::{App, Bounds, Context, ElementInputHandler, EventEmitter, FocusHandle, Focusable, KeyDownEvent, MouseButton, Pixels, ScrollHandle, SharedString, UTF16Selection, Window, canvas, div, prelude::*, rgb};
+use crate::ui_scale::px;
 
 use crate::theme::{self, accent, dim, fg};
 

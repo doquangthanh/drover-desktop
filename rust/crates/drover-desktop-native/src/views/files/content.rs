@@ -3,7 +3,8 @@
 
 use std::sync::Arc;
 
-use gpui::{ClipboardItem, Context, Div, MouseButton, SharedString, div, prelude::*, px, rgb, uniform_list};
+use gpui::{ClipboardItem, Context, Div, MouseButton, SharedString, div, prelude::*, rgb, uniform_list};
+use crate::ui_scale::px;
 
 use crate::theme::{self, accent, dim, fg};
 use crate::views::changes::diff_view;

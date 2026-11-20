@@ -207,7 +207,7 @@ pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let tab = |label: &str, trees: bool, cx: &mut Context<DroverApp>| ui::tab(label, app.changes.show_trees == trees)
         .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |app, _, _, cx| { app.changes.show_trees = trees; cx.notify(); }));
     gpui::div().flex().flex_col().flex_1().min_h_0()
-        .child(gpui::div().h(gpui::px(36.)).flex_none().flex().items_center().gap(gpui::px(4.)).px(gpui::px(10.))
+        .child(gpui::div().h(crate::ui_scale::px(36.)).flex_none().flex().items_center().gap(crate::ui_scale::px(4.)).px(crate::ui_scale::px(10.))
             .border_b_1().border_color(crate::theme::border())
             .child(tab("Changes", false, cx)).child(tab("Worktrees", true, cx)))
         .child(content)

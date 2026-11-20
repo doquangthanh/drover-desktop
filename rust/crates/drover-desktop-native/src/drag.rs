@@ -36,8 +36,8 @@ impl DroverApp {
         let (x, y) = (f32::from(ev.position.x), f32::from(ev.position.y));
         match &mut self.drag {
             None => return,
-            Some(Drag::Panel { x0, w0 }) => self.panel_width = (*w0 + *x0 - x).clamp(PANEL.0, PANEL.1),
-            Some(Drag::Sidebar { x0, w0 }) => self.sidebar_width = (*w0 + x - *x0).clamp(SIDEBAR.0, SIDEBAR.1),
+            Some(Drag::Panel { x0, w0 }) => self.panel_width = (*w0 + (*x0 - x) / crate::ui_scale::zoom()).clamp(PANEL.0, PANEL.1),
+            Some(Drag::Sidebar { x0, w0 }) => self.sidebar_width = (*w0 + (x - *x0) / crate::ui_scale::zoom()).clamp(SIDEBAR.0, SIDEBAR.1),
             Some(Drag::Split { tab, path, dir, ratio }) => {
                 let Some(b) = self.split_bounds.lock().unwrap().get(&format!("{tab}|{path}")).copied() else { return };
                 let (pos, start, len) = match dir {

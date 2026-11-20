@@ -3,7 +3,8 @@
 
 #![allow(dead_code)] // shared by the views ported in phases 01-05; not all are used yet
 
-use gpui::{Div, FontWeight, div, prelude::*, px, rgb};
+use gpui::{Div, FontWeight, div, prelude::*, rgb};
+use crate::ui_scale::px;
 
 use crate::theme::{self, accent, chrome, dim, error, fg, muted, on_accent, UI_FONT};
 use crate::widgets::icon;

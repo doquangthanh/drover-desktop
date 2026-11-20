@@ -1,6 +1,7 @@
 //! Tab bar (`.tabs`, `.tab`, `.pb` in workspace.css) and status bar (`.status`).
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 
 use crate::theme::{self, accent, chrome, dim, done, error, fg, muted, raised, UI_FONT, tint};
 use crate::widgets::{icon, key_cap, kind_icon, short_path, state_mark};

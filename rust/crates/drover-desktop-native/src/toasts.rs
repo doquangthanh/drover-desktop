@@ -5,7 +5,8 @@
 
 use std::time::{Duration, Instant};
 
-use gpui::{Animation, AnimationExt, Context, Div, FontWeight, IntoElement, MouseButton, div, ease_out_quint, prelude::*, px, relative, rgb};
+use gpui::{Animation, AnimationExt, Context, Div, FontWeight, IntoElement, MouseButton, div, ease_out_quint, prelude::*, relative, rgb};
+use crate::ui_scale::px;
 use serde_json::{Value, json};
 
 use crate::theme::{self, blocked, dim, done, error, fg, muted, working};

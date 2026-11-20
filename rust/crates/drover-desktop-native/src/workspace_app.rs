@@ -62,6 +62,8 @@ pub struct DroverApp {
     pub settings: crate::views::settings::SettingsState,
     pub machines_form: crate::views::machines::MachinesForm,
     pub rules: crate::views::settings_rules::RulesState,
+    pub whats_new: crate::views::whats_new::WhatsNewState,
+    pub feedback: crate::views::feedback::FeedbackForm,
     /// The font code is drawn with in the views (diffs, files): the terminal's, as `terminal_paint::resolved` picks it.
     pub code_family: gpui::SharedString,
     /// The right panel beside the terminals (Agents, Files or Changes of the focused pane), as in Herdr.
@@ -133,6 +135,7 @@ impl DroverApp {
         let changes_in = crate::views::changes::ChangesInputs::new(cx);
         let machines_form = crate::views::machines::MachinesForm::new(cx);
         let font_form = crate::views::settings_look::FontForm::new(cx);
+        let feedback = crate::views::feedback::FeedbackForm::new(cx);
         let settings_editor = cx.new(|cx| TextInput::new_multiline(cx));
         cx.subscribe(&settings_editor, |app, _, ev, cx| {
             if let crate::views::text_input::InputEvent::Submit = ev { app.save_setting_file(cx); }
@@ -145,7 +148,7 @@ impl DroverApp {
                     term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter, agents_send,
                     agents: Default::default(), changes: Default::default(), changes_in,
                     files: Default::default(), inbox_filter: Default::default(),
-                    settings: Default::default(), machines_form, rules: Default::default(),
+                    settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
                     chord: false, show_shortcuts: false, picker: None, want_term_focus: true,
@@ -232,6 +235,17 @@ impl DroverApp {
         let size = if self.font_own.size > 0.0 { self.font_own.size } else if self.daemon_font.1 > 0.0 { self.daemon_font.1 } else { self.base_size };
         self.base_size = size;
         self.apply_term_font(&family);
+    }
+
+    /// Whole-interface zoom (Ctrl+Alt+= / Ctrl+Alt+- / Ctrl+Alt+0): `by` +1 / -1 steps, 0 = 100 %. Kept on this device.
+    pub fn zoom_app(&mut self, by: i32, cx: &mut Context<Self>) {
+        let next = crate::ui_scale::step(crate::ui_scale::zoom(), by);
+        crate::ui_scale::set(next);
+        if let Err(e) = crate::ui_scale::save_to(&crate::ui_scale::path(), next) {
+            self.toasts.error(format!("Could not save the interface size: {e}"));
+        }
+        self.sizes.lock().unwrap().clear(); // the panes are re-measured at the new size
+        cx.notify();
     }
 
     /// Terminal text zoom (Ctrl+= / Ctrl+- / Ctrl+0): `by` points, 0 = back to the daemon's size. Only the text;
@@ -339,6 +353,7 @@ impl Render for DroverApp {
         match self.view {
             View::Agents => crate::views::agents::refresh(self),
             View::Settings => crate::views::settings::refresh(self, cx),
+            View::WhatsNew => crate::views::whats_new::refresh(self),
             _ => {}
         }
         crate::views::panel::refresh(self, cx);
@@ -367,7 +382,7 @@ impl Render for DroverApp {
             .bg(rgb(theme::canvas()))
             .text_color(rgb(theme::fg()))
             .font_family(theme::UI_FONT)
-            .text_size(gpui::px(13.))
+            .text_size(crate::ui_scale::px(13.))
             // Resizing (drag.rs): the whole window follows the mouse until the button is released.
             .on_mouse_move(cx.listener(|app, ev, _, cx| app.drag_move(ev, cx)))
             .on_mouse_up(gpui::MouseButton::Left, cx.listener(|app, _, _, cx| app.drag_end(cx)))

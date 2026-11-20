@@ -1,6 +1,7 @@
 //! The confirm dialog (`.modal` in overlays.css): a dimmed backdrop, a card, Cancel and the action button.
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb, rgba};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb, rgba};
+use crate::ui_scale::px;
 
 use crate::theme::{self, error, fg, muted, UI_FONT};
 use crate::workspace_app::DroverApp;
