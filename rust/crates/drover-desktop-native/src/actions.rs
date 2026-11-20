@@ -27,6 +27,9 @@ pub enum Then {
     ClosePane(String),
     CloseTab(String),
     CloseSpace(String),
+    StopSubtree(String),
+    RemoveMachine(String),
+    UpdateApply(String),
 }
 
 /// What to do with an rpc reply when it arrives (checked by the drain loop).
@@ -83,6 +86,7 @@ impl DroverApp {
     pub fn show_pane(&mut self, pane: &str) {
         let Some(p) = self.store.pane(pane) else { return };
         self.view = crate::views::View::Terminals;
+        self.want_term_focus = true;
         self.space = Some(p.space_id.clone());
         self.tab = Some(p.tab_id.clone());
         self.focused = Some(pane.to_string());
@@ -94,6 +98,11 @@ impl DroverApp {
         // The state event with the new pane may come after the reply: remember it, the drain loop shows it.
         let id = v["id"].as_str().or_else(|| v["pane"]["id"].as_str()).unwrap_or("").to_string();
         app.show_when_known = Some(id);
+    }
+
+    /// A shell in a new tab, in `cwd` (the Changes view's "Terminal here"); it is shown once it exists.
+    pub fn open_shell_in(&mut self, cwd: &str) {
+        self.rpc_then("pane.create", json!({"command": "", "cwd": cwd}), Self::focus_created);
     }
 
     pub fn new_tab(&mut self, cx: &mut Context<Self>) {
@@ -157,12 +166,32 @@ impl DroverApp {
         cx.notify();
     }
 
+    /// The Agents view's Stop: the agent and every helper it started.
+    pub fn ask_stop_subtree(&mut self, pane: &str, cx: &mut Context<Self>) {
+        let Some(p) = self.store.pane(pane) else { return };
+        let helpers = drover_proto::agent_tree::subtree_ids(pane, &drover_proto::agent_tree::agents(&self.store.panes)).len() - 1;
+        let detail = match helpers {
+            0 => "It stops. Its terminal closes.".to_string(),
+            n => format!("It and the {n} helper{} it started stop.", if n > 1 { "s" } else { "" }),
+        };
+        self.confirm = Some(Confirm { title: format!("Stop {}?", p.name), detail, ok: "Stop", then: Then::StopSubtree(p.id.clone()) });
+        cx.notify();
+    }
+
     pub fn answer_confirm(&mut self, yes: bool, window: &mut Window, cx: &mut Context<Self>) {
         if let (true, Some(c)) = (yes, self.confirm.take()) {
             match c.then {
                 Then::ClosePane(id) => self.rpc("pane.close", json!({"pane": id})),
                 Then::CloseTab(id) => self.rpc("tab.close", json!({"tab": id})),
                 Then::CloseSpace(id) => self.rpc("space.remove", json!({"space": id})),
+                Then::StopSubtree(id) => self.rpc("pane.close", json!({"pane": id, "subtree": true})),
+                Then::RemoveMachine(alias) => self.rpc("machine.remove", json!({"alias": alias})),
+                Then::UpdateApply(tag) => {
+                    self.settings.update = Some(Err("Updating: the server restarts…".into()));
+                    self.rpc_reply("update.apply", json!({"tag": tag}), |app, r| {
+                        if let Err(e) = r { app.settings.update = Some(Err(format!("Update failed: {e}"))); }
+                    });
+                }
             }
         }
         self.confirm = None;

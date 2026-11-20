@@ -12,6 +12,28 @@ fn button(label: &str, danger: bool) -> Div {
         .child(label.to_string())
 }
 
+/// The keyboard shortcuts sheet (Ctrl+K Ctrl+S, or the status bar's hint): click outside or Escape closes it.
+pub fn shortcuts_overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
+    if !app.show_shortcuts {
+        return None;
+    }
+    let mut list = div().flex().flex_col().gap(px(2.));
+    for (keys, what) in crate::keys::SHORTCUTS {
+        list = list.child(div().flex().items_center().gap(px(12.)).py(px(4.))
+            .child(div().w(px(230.)).flex_none().text_size(px(12.)).text_color(rgb(theme::ACCENT)).child(keys))
+            .child(div().text_size(px(13.)).text_color(rgb(FG)).child(what)));
+    }
+    let card = div().w(px(560.)).p(px(22.)).flex().flex_col().gap(px(12.)).rounded(px(12.)).bg(rgb(0x1d1f23))
+        .border_1().border_color(theme::border2()).shadow_lg().font_family(UI_FONT)
+        .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(rgb(FG)).child("Keyboard shortcuts"))
+        .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child("VS Code's keys. Ctrl+K W: press Ctrl+K, let go, then W. They work inside terminals too."))
+        .child(list)
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation());
+    Some(div().absolute().top_0().left_0().size_full().flex().items_center().justify_center().bg(rgba(0x00000073))
+        .occlude().child(card)
+        .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.show_shortcuts = false; cx.notify(); })))
+}
+
 pub fn confirm_overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let c = app.confirm.as_ref()?;
     let card = div().w(px(420.)).p(px(22.)).flex().flex_col().gap(px(10.)).rounded(px(12.)).bg(rgb(0x1d1f23))

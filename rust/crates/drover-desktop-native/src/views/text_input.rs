@@ -53,6 +53,14 @@ impl TextInput {
         cx.notify();
     }
 
+    /// What the field shows: its text with the word being composed at the cursor (a search filters on it live).
+    pub fn value(&self) -> String {
+        match &self.marked {
+            Some(m) => format!("{}{m}{}", &self.text[..self.cursor], &self.text[self.cursor..]),
+            None => self.text.clone(),
+        }
+    }
+
     fn edit(&mut self, range: Range<usize>, with: &str, cx: &mut Context<Self>) {
         let with = with.replace(['\r', '\n', '\t'], " "); // one line: a pasted newline would submit nothing useful
         self.text.replace_range(range.clone(), &with);
@@ -176,6 +184,7 @@ impl gpui::EntityInputHandler for TextInput {
         if self.marked.is_none() {
             self.run_waiting_key(cx); // the word was dropped, not committed: the key still counts
         }
+        cx.emit(InputEvent::Changed);
         cx.notify();
     }
 

@@ -17,24 +17,39 @@ use crate::workspace_app::DroverApp;
 
 pub fn tab_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let body = div().flex().flex_1().min_h_0().min_w_0().p(px(8.));
-    match app.tab.as_ref().and_then(|t| app.store.tab_view(t)) {
-        Some(node) => body.child(node_view(app, &node, cx)),
+    match app.tab.clone().and_then(|t| app.store.tab_view(&t).map(|n| (t, n))) {
+        Some((tab, node)) => body.child(node_view(app, &node, &tab, String::new(), cx)),
         None => body.items_center().justify_center().text_color(rgb(DIM))
             .child(if app.connected { "No terminal in this space yet" } else { "Waiting for drover-server…" }),
     }
 }
 
-fn node_view(app: &DroverApp, node: &Node, cx: &mut Context<DroverApp>) -> AnyElement {
+/// A split draws its two sides around a gutter: drag it to resize, double-click to even it out (drag.rs).
+fn node_view(app: &DroverApp, node: &Node, tab: &str, path: String, cx: &mut Context<DroverApp>) -> AnyElement {
     match node {
         Node::Pane { pane } => pane_frame(app, pane, cx).into_any_element(),
         Node::Split { split, ratio, a, b } => {
             let row = matches!(split, Dir::Row);
-            let ratio = ratio.clamp(0.05, 0.95) as f32;
-            let first = div().flex().min_w_0().min_h_0().flex_basis(relative(ratio)).flex_shrink_0().child(node_view(app, a, cx));
-            let second = div().flex().flex_1().min_w_0().min_h_0().child(node_view(app, b, cx));
-            let gap = div().flex_shrink_0().when(row, |d| d.w(px(8.))).when(!row, |d| d.h(px(8.)));
-            div().flex().flex_1().min_w_0().min_h_0().when(row, |d| d.flex_row()).when(!row, |d| d.flex_col())
-                .child(first).child(gap).child(second).into_any_element()
+            let ratio = app.shown_ratio(tab, &path, *ratio).clamp(0.05, 0.95) as f32;
+            let first = div().flex().min_w_0().min_h_0().flex_basis(relative(ratio)).flex_shrink_0()
+                .child(node_view(app, a, tab, format!("{path}a"), cx));
+            let second = div().flex().flex_1().min_w_0().min_h_0().child(node_view(app, b, tab, format!("{path}b"), cx));
+            let (key, bounds) = (format!("{tab}|{path}"), app.split_bounds.clone());
+            let (t, p, dir) = (tab.to_string(), path.clone(), *split);
+            let gutter = div().flex_shrink_0().when(row, |d| d.w(px(8.)).cursor_col_resize()).when(!row, |d| d.h(px(8.)).cursor_row_resize())
+                .hover(|d| d.bg(theme::hover()))
+                .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| {
+                    if ev.click_count >= 2 {
+                        app.save_ratio(&t, &p, 0.5);
+                        cx.stop_propagation();
+                    } else {
+                        app.start_drag(crate::drag::Drag::Split { tab: t.clone(), path: p.clone(), dir, ratio: ratio as f64 }, cx);
+                    }
+                }));
+            div().relative().flex().flex_1().min_w_0().min_h_0().when(row, |d| d.flex_row()).when(!row, |d| d.flex_col())
+                .child(canvas(|_, _, _| {}, move |b: Bounds<Pixels>, _, _, _| { bounds.lock().unwrap().insert(key.clone(), b); })
+                    .absolute().top_0().left_0().size_full())
+                .child(first).child(gutter).child(second).into_any_element()
         }
     }
 }

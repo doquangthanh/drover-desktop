@@ -27,10 +27,14 @@ const ICONS: &[(&str, &str)] = &[
 
 pub const LOGO: &[u8] = include_bytes!("../assets/logo.png");
 
-const FONTS: [&[u8]; 3] = [
+/// Geist for the UI; JetBrains Mono (OFL, `assets/fonts/JetBrainsMono-OFL.txt`) for terminals whose system font has no
+/// Vietnamese letters (terminal_paint::resolved), as Herdr ships it.
+const FONTS: [&[u8]; 5] = [
     include_bytes!("../assets/fonts/Geist-Regular.ttf"),
     include_bytes!("../assets/fonts/Geist-Medium.ttf"),
     include_bytes!("../assets/fonts/Geist-SemiBold.ttf"),
+    include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf"),
+    include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf"),
 ];
 
 pub struct Assets;
@@ -53,6 +57,6 @@ impl AssetSource for Assets {
 
 pub fn load_fonts(cx: &App) {
     if let Err(e) = cx.text_system().add_fonts(FONTS.iter().map(|f| Cow::Borrowed(*f)).collect()) {
-        eprintln!("drover: could not load the Geist font: {e}");
+        eprintln!("drover: could not load the bundled fonts: {e}");
     }
 }

@@ -39,6 +39,17 @@ impl DroverApp {
             cx.stop_propagation();
             return;
         }
+        if self.show_shortcuts && ev.keystroke.key == "escape" {
+            self.show_shortcuts = false;
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        // Drover's shortcuts first, even inside a terminal (as VS Code; keys.rs).
+        if self.shortcut(ev, window, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.view != crate::views::View::Terminals {
             // A view is shown: keys are not for the agents; Escape goes back to the terminals.
             if ev.keystroke.key == "escape" {

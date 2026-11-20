@@ -3,7 +3,12 @@
 mod actions;
 mod assets;
 mod dialogs;
+mod drag;
+mod find;
+mod font_fallback;
+mod keys;
 mod layout_view;
+mod picker;
 mod powerline;
 mod sidebar;
 mod terminal_input;
@@ -27,6 +32,8 @@ fn main() {
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions { title: Some("Drover".into()), ..Default::default() }),
+                // WM_CLASS (X11) / app_id (Wayland) = the desktop entry's name, so the dock shows Drover's icon.
+                app_id: Some("drover".into()),
                 ..Default::default()
             },
             |_, cx| cx.new(DroverApp::new),

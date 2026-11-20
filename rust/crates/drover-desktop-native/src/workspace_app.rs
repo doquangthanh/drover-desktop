@@ -53,6 +53,29 @@ pub struct DroverApp {
     /// What the main area shows: the terminals or one of the views (views/mod.rs).
     pub view: View,
     pub agents_filter: Entity<TextInput>,
+    pub agents_send: Entity<TextInput>,
+    pub agents: crate::views::agents::AgentsState,
+    pub changes: crate::views::changes::ChangesState,
+    pub changes_in: crate::views::changes::ChangesInputs,
+    pub files: crate::views::files::FilesState,
+    pub inbox_filter: crate::views::inbox::Filter,
+    pub settings: crate::views::settings::SettingsState,
+    pub machines_form: crate::views::machines::MachinesForm,
+    /// The font code is drawn with in the views (diffs, files): the terminal's, as `terminal_paint::resolved` picks it.
+    pub code_family: gpui::SharedString,
+    /// The right panel beside the terminals (Agents, Files or Changes of the focused pane), as in Herdr.
+    pub panel: Option<View>,
+    pub panel_width: f32,
+    pub sidebar_width: f32,
+    pub drag: Option<crate::drag::Drag>,
+    pub split_bounds: crate::drag::SplitBounds,
+    /// Ctrl+K was pressed: the next key finishes the chord (keys.rs).
+    pub chord: bool,
+    pub show_shortcuts: bool,
+    pub picker: Option<crate::picker::Picker>,
+    /// Give the keys back to the terminals on the next frame (a tab or pane was shown, a pop-up closed). Only then:
+    /// a field in a panel keeps its focus while you type.
+    pub want_term_focus: bool,
 }
 
 impl DroverApp {
@@ -71,12 +94,28 @@ impl DroverApp {
         .detach();
         let agents_filter = cx.new(|cx| TextInput::new("Filter agents", cx));
         cx.observe(&agents_filter, |_, _, cx| cx.notify()).detach();
+        let agents_send = cx.new(|cx| TextInput::new("Send to this agent…", cx));
+        cx.subscribe(&agents_send, |app, input, ev, cx| {
+            if let crate::views::text_input::InputEvent::Submit = ev {
+                let text = input.read(cx).text.clone();
+                app.send_to_selected_agent(text);
+                input.update(cx, |i, cx| i.set_text("", cx));
+            }
+        }).detach();
+        let changes_in = crate::views::changes::ChangesInputs::new(cx);
+        let machines_form = crate::views::machines::MachinesForm::new(cx);
         let family = std::env::var("DROVER_NATIVE_FONT").unwrap_or_else(|_| theme::DEFAULT_TERMINAL_FONT.into());
         DroverApp { client, store: Store::default(), screens: Arc::default(), space: None, tab: None, connected: false,
                     status: "connecting…".into(), term_font: TermFont::new(&family, 13.0), switched_at: Arc::default(), last_switch: None,
                     focused: None, term_focus: cx.focus_handle(), marked: None, cursor_bounds: Arc::default(),
                     sizes: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true,
-                    term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter }
+                    term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter, agents_send,
+                    agents: Default::default(), changes: Default::default(), changes_in,
+                    files: Default::default(), inbox_filter: Default::default(),
+                    settings: Default::default(), machines_form,
+                    code_family: crate::font_fallback::BUNDLED_MONO.into(), panel: None,
+                    panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
+                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true }
     }
 
     fn drain(&mut self) -> bool {
@@ -97,6 +136,7 @@ impl DroverApp {
             }
         }
         changed |= self.take_replies();
+        changed |= crate::views::files::tick(self);
         if let Some(id) = self.show_when_known.clone().filter(|id| self.store.pane(id).is_some()) {
             self.show_when_known = None;
             self.show_pane(&id);
@@ -192,6 +232,7 @@ impl DroverApp {
     pub fn select_tab(&mut self, id: String, cx: &mut Context<Self>) {
         self.mark_switch();
         self.view = View::Terminals;
+        self.want_term_focus = true;
         self.tab = Some(id);
         self.keep_selection_valid();
         cx.notify();
@@ -211,11 +252,21 @@ impl DroverApp {
 
 impl Render for DroverApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.code_family = crate::terminal_paint::resolved(&self.term_font, window).font.family;
         // Terminals shown, or a question open: keys belong to the app, not to a view's field (e.g. after a tab
         // click left a view, or a close was asked from the sidebar while a field had focus).
-        if (self.view == View::Terminals || self.confirm.is_some()) && !self.term_focus.is_focused(window) {
-            window.focus(&self.term_focus);
+        if (self.confirm.is_some() || (self.want_term_focus && self.view == View::Terminals)) && self.picker.is_none() {
+            self.want_term_focus = false;
+            if !self.term_focus.is_focused(window) {
+                window.focus(&self.term_focus);
+            }
         }
+        match self.view {
+            View::Agents => crate::views::agents::refresh(self),
+            View::Settings => crate::views::settings::refresh(self),
+            _ => {}
+        }
+        crate::views::panel::refresh(self, cx);
         let main = div()
             .flex()
             .flex_col()
@@ -224,8 +275,15 @@ impl Render for DroverApp {
             .track_focus(&self.term_focus)
             .on_key_down(cx.listener(Self::on_key))
             .child(topbar::tab_bar(self, cx))
-            .child(if self.view == View::Terminals { layout_view::tab_body(self, cx) } else { views::body(self, cx) });
-        let overlay = crate::dialogs::confirm_overlay(self, cx);
+            .child(if self.view == View::Terminals {
+                div().flex().flex_row().flex_1().min_h_0().min_w_0()
+                    .child(layout_view::tab_body(self, cx))
+                    .children(crate::views::panel::panel(self, cx))
+            } else {
+                views::body(self, cx)
+            });
+        let overlay = crate::dialogs::confirm_overlay(self, cx).or_else(|| crate::picker::overlay(self, cx))
+            .or_else(|| crate::dialogs::shortcuts_overlay(self, cx));
         div()
             .relative()
             .flex()
@@ -235,6 +293,13 @@ impl Render for DroverApp {
             .text_color(rgb(theme::FG))
             .font_family(theme::UI_FONT)
             .text_size(gpui::px(13.))
+            // Resizing (drag.rs): the whole window follows the mouse until the button is released.
+            .on_mouse_move(cx.listener(|app, ev, _, cx| app.drag_move(ev, cx)))
+            .on_mouse_up(gpui::MouseButton::Left, cx.listener(|app, _, _, cx| app.drag_end(cx)))
+            .when(self.drag.is_some(), |d| match &self.drag {
+                Some(crate::drag::Drag::Split { dir: drover_proto::wire::Dir::Col, .. }) => d.cursor_row_resize(),
+                _ => d.cursor_col_resize(),
+            })
             .child(div().flex().flex_row().flex_1().min_h_0()
                 .when(self.sidebar_open, |d| d.child(sidebar::sidebar(self, cx))).child(main))
             .child(topbar::status_bar(self, cx))

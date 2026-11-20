@@ -63,8 +63,20 @@ fn hsla(c: u32) -> Hsla {
     rgb(c).into()
 }
 
+/// The terminal font to draw with: the system terminal's, or the bundled JetBrains Mono when it has no Vietnamese
+/// letters (Ubuntu Mono has none), so every letter of a word comes from one font, as in Herdr.
+pub fn resolved(tf: &TermFont, window: &Window) -> TermFont {
+    if crate::font_fallback::covers_vietnamese(window, &tf.font.family) {
+        return tf.clone();
+    }
+    let mut t = tf.clone();
+    t.font.family = crate::font_fallback::BUNDLED_MONO.into();
+    t
+}
+
 /// Width of one cell for the terminal font.
 pub fn cell_width(tf: &TermFont, window: &Window) -> Pixels {
+    let tf = &resolved(tf, window);
     let ts = window.text_system();
     ts.advance(ts.resolve_font(&tf.font), px(tf.size), 'm').map(|s| s.width).unwrap_or(px(tf.size * 0.6))
 }
@@ -101,6 +113,7 @@ fn selection_color() -> Hsla {
 pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused: bool, marked: Option<&str>,
              link: Option<(i32, std::ops::Range<usize>)>, window: &mut Window, cx: &mut App) -> Bounds<Pixels> {
     let ts = window.text_system().clone();
+    let tf = &resolved(tf, window);
     let cell_w = cell_width(tf, window);
     let lh = px(tf.line_height);
     let term = screen.term();
@@ -144,6 +157,9 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
             let start = text.len();
             text.push(ch);
             let mut run = run_for(cell.flags, fg, tf);
+            if let Some(family) = crate::font_fallback::family_for(window, &tf.font.family, ch) {
+                run.font.family = family;
+            }
             run.len = text.len() - start;
             match runs.last_mut() {
                 Some(last) if last.color == run.color && last.font == run.font && last.underline == run.underline => last.len += run.len,

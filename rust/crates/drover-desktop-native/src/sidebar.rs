@@ -103,11 +103,19 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .child(foot_row(View::Settings).on_mouse_down(MouseButton::Left, show(View::Settings)));
 
     let half = || div().flex_1().min_h_0().flex().flex_col().overflow_hidden();
-    div().w(px(260.)).flex_none().flex().flex_col().bg(rgb(CHROME)).border_r_1().border_color(theme::border())
-        .font_family(UI_FONT).text_size(px(13.))
+    // The right edge resizes the sidebar (drag.rs).
+    let w0 = app.sidebar_width;
+    let edge = div().absolute().top_0().right(px(-3.)).h_full().w(px(6.)).cursor_col_resize()
+        .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| {
+            app.start_drag(crate::drag::Drag::Sidebar { x0: f32::from(ev.position.x), w0 }, cx);
+        }));
+    div().relative().w(px(app.sidebar_width)).flex_none().flex().flex_col().bg(rgb(CHROME)).border_r_1().border_color(theme::border())
+        .font_family(UI_FONT).text_size(px(13.)).child(edge)
         .child(brand)
         .child(half().child(shead("Spaces").child(div().on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_space(cx)))
             .child(icon("plus", 14., DIM)))).child(spaces))
-        .child(half().border_t_1().border_color(theme::border()).child(shead("Agents").child(icon("layers", 14., DIM))).child(agents))
+        .child(half().border_t_1().border_color(theme::border()).child(shead("Agents").child(div().rounded(px(5.)).hover(|d| d.bg(theme::hover()))
+            .child(icon("layers", 14., DIM))
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.set_view(View::Agents, window, cx))))).child(agents))
         .child(foot)
 }

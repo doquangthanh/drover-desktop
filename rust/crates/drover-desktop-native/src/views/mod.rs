@@ -2,10 +2,17 @@
 //! of opening the web UI. Each one is ported in its own phase (plans/261120-0900-native-gpui-views-port); until
 //! then its body says so and offers the web view.
 
+pub mod agents;
+pub mod changes;
+pub mod files;
+pub mod inbox;
+pub mod machines;
+pub mod panel;
+pub mod settings;
 pub mod text_input;
 pub mod ui;
 
-use gpui::{Context, Div, MouseButton, Window, div, prelude::*, px};
+use gpui::{Context, Div, MouseButton, Window, div, prelude::*};
 
 use crate::workspace_app::DroverApp;
 use ui::Kind;
@@ -47,6 +54,11 @@ impl View {
         }
     }
 
+    /// Drawn in this window (all of them now; a view that is not ported yet would open the web UI instead).
+    pub fn is_native(self) -> bool {
+        true
+    }
+
     /// The web UI's name for the same view (`#tree`, `#changes`...), for "Open in browser".
     pub fn web(self) -> &'static str {
         match self {
@@ -64,6 +76,11 @@ impl View {
 impl DroverApp {
     /// Show `view`; the terminals take the keys back when they are shown again.
     pub fn set_view(&mut self, view: View, window: &mut Window, cx: &mut Context<Self>) {
+        crate::actions::trace(&format!("view: {view:?}"));
+        if !view.is_native() {
+            self.open_web(view.web());
+            return;
+        }
         self.view = view;
         if view == View::Terminals {
             window.focus(&self.term_focus);
@@ -79,10 +96,13 @@ pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, _| app.open_web(view.web())));
     let head = ui::header(view.icon(), view.title()).child(web);
     let content = match view {
-        View::Agents => div().flex().flex_col().gap(px(10.)).p(px(16.)).max_w(px(420.))
-            .child(app.agents_filter.clone())
-            .child(ui::note(format!("Typed: {}", app.agents_filter.read(cx).text), false)),
-        _ => ui::note(format!("{} is not drawn here yet: it comes in a later phase.", view.title()), false),
+        View::Agents => agents::body(app, cx),
+        View::Changes => changes::panel_body(app, cx),
+        View::Files => files::panel_body(app, cx),
+        View::Inbox => inbox::body(app, cx),
+        View::Settings => settings::body(app, cx),
+        View::Machines => machines::body(app, cx),
+        _ => ui::note(format!("{} is not drawn here yet.", view.title()), false),
     };
     div().flex().flex_col().flex_1().min_h_0().min_w_0().child(head).child(content)
 }

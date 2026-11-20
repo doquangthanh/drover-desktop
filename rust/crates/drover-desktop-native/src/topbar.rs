@@ -7,8 +7,7 @@ use crate::widgets::{icon, key_cap, kind_icon, short_path, state_mark};
 use crate::views::View;
 use crate::workspace_app::DroverApp;
 
-fn pb(view: View, shown: View) -> Div {
-    let on = view == shown;
+fn pb(view: View, on: bool) -> Div {
     div().h(px(26.)).flex().items_center().gap(px(5.)).px(px(8.)).rounded(px(6.)).text_size(px(12.))
         .text_color(rgb(if on { FG } else { MUTED })).when(on, |d| d.bg(theme::selected()))
         .hover(|d| d.bg(theme::hover()).text_color(rgb(FG))).child(icon(view.icon(), 14., if on { FG } else { MUTED }))
@@ -43,15 +42,16 @@ pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
             .hover(|d| d.bg(theme::hover())).child(icon("plus", 14., DIM))
             .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_tab(cx))));
     }
-    let show = |view: View| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, window: &mut gpui::Window, cx: &mut Context<DroverApp>| app.set_view(view, window, cx));
+    let toggle = |view: View| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, _: &mut gpui::Window, cx: &mut Context<DroverApp>| app.toggle_panel(view, cx));
+    let open = |view: View| app.view == View::Terminals && app.panel == Some(view);
     bar.child(div().flex_1())
         .child(div().flex().items_center().gap(px(2.))
             .child(div().size(px(26.)).rounded(px(6.)).flex().items_center().justify_center().hover(|d| d.bg(theme::hover()))
                 .child(icon("sidebar", 15., DIM))
                 .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.sidebar_open = !app.sidebar_open; cx.notify(); })))
-            .child(pb(View::Agents, app.view).on_mouse_down(MouseButton::Left, show(View::Agents)))
-            .child(pb(View::Files, app.view).on_mouse_down(MouseButton::Left, show(View::Files)))
-            .child(pb(View::Changes, app.view).on_mouse_down(MouseButton::Left, show(View::Changes))))
+            .child(pb(View::Agents, open(View::Agents)).on_mouse_down(MouseButton::Left, toggle(View::Agents)))
+            .child(pb(View::Files, open(View::Files)).on_mouse_down(MouseButton::Left, toggle(View::Files)))
+            .child(pb(View::Changes, open(View::Changes)).on_mouse_down(MouseButton::Left, toggle(View::Changes))))
 }
 
 pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
@@ -68,7 +68,7 @@ pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     if let Some(branch) = space.and_then(|s| s.branch.clone()) {
         let dirty = space.and_then(|s| s.dirty).unwrap_or(0);
         bar = bar.child(div().h(px(20.)).px(px(7.)).rounded(px(5.)).flex().items_center().gap(px(5.)).max_w(px(240.))
-            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.set_view(View::Changes, window, cx)))
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.panel = Some(View::Changes); app.view = View::Terminals; cx.notify(); }))
             .bg(tint(ACCENT, 0.14)).text_color(rgb(ACCENT)).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD)
             .child(icon("branch", 12., ACCENT)).child(div().truncate().child(branch))
             .when(dirty > 0, |d| d.child(div().text_color(rgb(BLOCKED)).child(format!("●{dirty}")))));
@@ -77,6 +77,8 @@ pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         bar = bar.child(div().min_w_0().truncate().child(short_path(&p.cwd)));
     }
     bar.child(div().flex_1())
+        .when(app.chord, |d| d.child(div().text_color(rgb(ACCENT)).child("Ctrl+K… waiting for the second key")))
         .child(div().flex().items_center().gap(px(5.)).child(key_cap("Ctrl+K")).child(key_cap("Ctrl+S"))
-            .child(div().text_color(rgb(DIM)).child("shortcuts")))
+            .child(div().text_color(rgb(DIM)).child("shortcuts"))
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.show_shortcuts = true; cx.notify(); })))
 }
