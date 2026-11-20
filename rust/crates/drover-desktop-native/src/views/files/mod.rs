@@ -109,9 +109,19 @@ impl DroverApp {
                 }
             }
         } else {
-            self.files.file = Some(path);
-            self.files.show_diff = false;
-            self.files_load_file(false);
+            match next_file(self.files.file.as_deref(), &path) {
+                Some(open) => {
+                    self.files.file = Some(open);
+                    self.files.show_diff = false;
+                    self.files_load_file(false);
+                }
+                None => { // clicked the file that is open: close it
+                    self.files.file = None;
+                    self.files.content = None;
+                    self.files.diff = None;
+                    self.files.show_diff = false;
+                }
+            }
         }
         cx.notify();
     }
@@ -168,4 +178,21 @@ pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .child(div().flex().flex_col().min_h_0().when(app.files.file.is_some(), |d| d.h(relative(0.42)).flex_none()).when(app.files.file.is_none(), |d| d.flex_1())
             .border_b_1().border_color(crate::theme::border()).child(tree::panel(app, &name, cx)))
         .when(app.files.file.is_some(), |d| d.child(content::panel(app, cx)))
+}
+
+/// The file to show after a click on `clicked`: that file, or None when it was already the open one (a second click closes it).
+fn next_file(current: Option<&str>, clicked: &str) -> Option<String> {
+    (current != Some(clicked)).then(|| clicked.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_file;
+
+    #[test]
+    fn a_click_opens_a_file_and_a_second_click_on_it_closes_it() {
+        assert_eq!(next_file(None, "a.rs"), Some("a.rs".into()));
+        assert_eq!(next_file(Some("a.rs"), "b.rs"), Some("b.rs".into())); // another file: switch
+        assert_eq!(next_file(Some("a.rs"), "a.rs"), None); // the same file again: close
+    }
 }
