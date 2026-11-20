@@ -134,7 +134,13 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
                 let w = if cell.flags.contains(Flags::WIDE_CHAR) { cell_w * 2. } else { cell_w };
                 window.paint_quad(fill(Bounds::new(point(bounds.origin.x + cell_w * c as f32, y), size(w, lh)), selection_color()));
             }
-            let ch = if cell.c == '\0' || cell.flags.contains(Flags::HIDDEN) { ' ' } else { cell.c };
+            let mut ch = if cell.c == '\0' || cell.flags.contains(Flags::HIDDEN) { ' ' } else { cell.c };
+            ch = crate::powerline::substitute(ch).unwrap_or(ch);
+            if crate::powerline::is_drawn(ch) {
+                let at = Bounds::new(point(bounds.origin.x + cell_w * c as f32, y), size(cell_w, lh));
+                crate::powerline::paint(ch, at, hsla(fg), window);
+                ch = ' ';
+            }
             let start = text.len();
             text.push(ch);
             let mut run = run_for(cell.flags, fg, tf);

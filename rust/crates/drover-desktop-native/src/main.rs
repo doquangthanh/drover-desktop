@@ -4,6 +4,7 @@ mod actions;
 mod assets;
 mod dialogs;
 mod layout_view;
+mod powerline;
 mod sidebar;
 mod terminal_input;
 mod terminal_paint;
