@@ -44,9 +44,8 @@ pub fn selected(app: &DroverApp, rows: &[TreeRow], agents: &[&Pane]) -> Option<S
 pub fn refresh(app: &mut DroverApp) {
     if app.focused != app.agents.last_focus {
         app.agents.last_focus = app.focused.clone();
-        if let Some(p) = app.focused.as_deref().and_then(|id| app.store.pane(id)).filter(|p| p.kind != "shell") {
-            app.agents.selected = Some(p.id.clone());
-        }
+        // Follow the focus; a shell has no agent, so nothing stays selected from the previous pane.
+        app.agents.selected = app.focused.as_deref().and_then(|id| app.store.pane(id)).filter(|p| p.kind != "shell").map(|p| p.id.clone());
     }
     let agents = agent_tree::agents(&app.store.panes);
     let rows = agent_tree::tree_rows(&agents);
@@ -98,8 +97,14 @@ impl DroverApp {
 /// The panel: the selected agent (the focused one, else the last picked) and its tree's activity.
 pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let agents = agent_tree::agents(&app.store.panes);
-    let rows = agent_tree::tree_rows(&agents);
-    match selected(app, &rows, &agents).as_deref().and_then(|id| app.store.pane(id)) {
+    // Beside the terminals this panel is the focused pane's agent, not the first one found.
+    let focused = app.focused.as_deref().and_then(|id| app.store.pane(id));
+    if focused.is_none_or(|p| p.kind == "shell") {
+        let what = focused.map(|p| p.name.clone()).unwrap_or_default();
+        return crate::views::ui::note(if what.is_empty() { "No pane focused.".to_string() }
+            else { format!("{what} is a shell, not an agent. Focus an agent to see it here.") }, false);
+    }
+    match focused {
         Some(pane) => {
             let root = agent_tree::root_of(&pane.id, &agents);
             let tree = agent_tree::subtree_ids(&root, &agents);

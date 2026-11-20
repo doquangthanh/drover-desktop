@@ -64,7 +64,9 @@ pub struct DroverApp {
     /// The font code is drawn with in the views (diffs, files): the terminal's, as `terminal_paint::resolved` picks it.
     pub code_family: gpui::SharedString,
     /// The right panel beside the terminals (Agents, Files or Changes of the focused pane), as in Herdr.
-    pub panel: Option<View>,
+    /// Which panel (Agents, Files or Changes) is open beside each pane's terminal: per pane, so another pane,
+    /// agent or space shows none until you open it there.
+    pub panels: HashMap<String, View>,
     pub panel_width: f32,
     pub sidebar_width: f32,
     pub drag: Option<crate::drag::Drag>,
@@ -128,7 +130,7 @@ impl DroverApp {
                     agents: Default::default(), changes: Default::default(), changes_in,
                     files: Default::default(), inbox_filter: Default::default(),
                     settings: Default::default(), machines_form,
-                    code_family: crate::font_fallback::BUNDLED_MONO.into(), panel: None,
+                    code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
                     chord: false, show_shortcuts: false, picker: None, want_term_focus: true,
                     toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), base_size: 13.0, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
@@ -225,6 +227,8 @@ impl DroverApp {
     }
 
     fn keep_selection_valid(&mut self) {
+        let store = &self.store;
+        self.panels.retain(|pane, _| store.pane(pane).is_some()); // a closed pane keeps no panel
         let space_ok = self.space.as_ref().is_some_and(|s| self.store.spaces.iter().any(|x| &x.id == s));
         if !space_ok {
             self.space = self.store.spaces.first().map(|s| s.id.clone());

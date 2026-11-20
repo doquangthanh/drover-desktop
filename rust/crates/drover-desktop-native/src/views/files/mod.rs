@@ -140,7 +140,7 @@ impl DroverApp {
 
 /// Called from the app's drain loop: start on a new scope, poll every 3 s while the panel is open.
 pub fn tick(app: &mut DroverApp) -> bool {
-    if app.view != View::Terminals || app.panel != Some(View::Files) {
+    if app.view != View::Terminals || app.panel() != Some(View::Files) {
         return false;
     }
     let Some(sc) = crate::views::panel::scope(app) else { return false };

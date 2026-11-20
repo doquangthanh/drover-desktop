@@ -47,7 +47,7 @@ pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
                 .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.unsettle_all(cx)))));
     }
     let toggle = |view: View| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, _: &mut gpui::Window, cx: &mut Context<DroverApp>| app.toggle_panel(view, cx));
-    let open = |view: View| app.view == View::Terminals && app.panel == Some(view);
+    let open = |view: View| app.view == View::Terminals && app.panel() == Some(view);
     bar.child(div().flex_1())
         .child(div().flex().items_center().gap(px(2.))
             .child(div().size(px(26.)).rounded(px(6.)).flex().items_center().justify_center().hover(|d| d.bg(theme::hover()))
@@ -72,7 +72,7 @@ pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     if let Some(branch) = space.and_then(|s| s.branch.clone()) {
         let dirty = space.and_then(|s| s.dirty).unwrap_or(0);
         bar = bar.child(div().h(px(20.)).px(px(7.)).rounded(px(5.)).flex().items_center().gap(px(5.)).max_w(px(240.))
-            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.panel = Some(View::Changes); app.view = View::Terminals; cx.notify(); }))
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.set_panel(Some(View::Changes)); app.view = View::Terminals; cx.notify(); }))
             .bg(tint(accent(), 0.14)).text_color(rgb(accent())).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD)
             .child(icon("branch", 12., accent())).child(div().truncate().child(branch))
             .when(dirty > 0, |d| d.child(div().text_color(rgb(crate::theme::blocked())).child(format!("●{dirty}")))));

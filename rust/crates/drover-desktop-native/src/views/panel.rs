@@ -29,9 +29,23 @@ pub fn scope(app: &DroverApp) -> Option<Scope> {
 }
 
 impl DroverApp {
+    /// The panel open beside the focused pane, if any.
+    pub fn panel(&self) -> Option<View> {
+        self.panels.get(self.focused.as_deref()?).copied()
+    }
+
+    /// Open (or close, with None) a panel for the focused pane only.
+    pub fn set_panel(&mut self, view: Option<View>) {
+        let Some(pane) = self.focused.clone() else { return };
+        match view {
+            Some(v) => { self.panels.insert(pane, v); }
+            None => { self.panels.remove(&pane); }
+        }
+    }
+
     /// Open `view` in the panel, or close it when it is the one shown.
     pub fn toggle_panel(&mut self, view: View, cx: &mut Context<Self>) {
-        self.panel = if self.panel == Some(view) { None } else { Some(view) };
+        self.set_panel(if self.panel() == Some(view) { None } else { Some(view) });
         self.view = View::Terminals;
         cx.notify();
     }
@@ -42,7 +56,7 @@ pub fn refresh(app: &mut DroverApp, cx: &gpui::App) {
     if app.view != View::Terminals {
         return;
     }
-    match app.panel {
+    match app.panel() {
         Some(View::Agents) => agents::refresh(app),
         Some(View::Changes) => changes::refresh(app, cx),
         _ => {}
@@ -50,7 +64,7 @@ pub fn refresh(app: &mut DroverApp, cx: &gpui::App) {
 }
 
 pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
-    let view = app.panel.filter(|_| app.view == View::Terminals)?;
+    let view = app.panel().filter(|_| app.view == View::Terminals)?;
     let sc = scope(app);
     let what = match (&sc, sc.as_ref().and_then(|s| s.pane.as_deref()).and_then(|id| app.store.pane(id))) {
         (_, Some(p)) => format!("{} · {}", p.name, short_path(&p.cwd)),
@@ -64,7 +78,7 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
         .child(div().flex_1().min_w_0().truncate().text_size(px(11.5)).text_color(rgb(dim())).child(what))
         .child(div().size(px(22.)).rounded(px(5.)).flex().items_center().justify_center().hover(|d| d.bg(theme::hover()))
             .child(icon("close", 12., dim()))
-            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.panel = None; cx.notify(); })));
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.set_panel(None); cx.notify(); })));
     let body = match view {
         View::Agents => agents::panel_body(app, cx),
         View::Files => files::panel_body(app, cx),
