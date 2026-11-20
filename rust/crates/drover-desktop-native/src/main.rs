@@ -15,6 +15,7 @@ mod terminal_input;
 mod terminal_paint;
 mod terminal_selection;
 mod theme;
+mod toasts;
 mod topbar;
 mod views;
 mod widgets;

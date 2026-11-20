@@ -88,6 +88,19 @@ impl DroverApp {
         term.selection_to_string().filter(|t| !t.is_empty())
     }
 
+    /// Select the focused pane's whole screen and scrollback (Herdr's `terminal.select_all`); Ctrl+C then copies it.
+    pub fn select_all(&mut self, cx: &mut Context<Self>) {
+        let Some(pane) = self.focused.clone() else { return };
+        if let Some(screen) = self.screens.lock().unwrap().get_mut(&pane) {
+            let term = screen.term_mut();
+            let (top, bottom, last) = (term.topmost_line(), term.bottommost_line(), term.last_column());
+            let mut sel = Selection::new(SelectionType::Simple, Point::new(top, Column(0)), Side::Left);
+            sel.update(Point::new(bottom, last), Side::Right);
+            term.selection = Some(sel);
+        }
+        cx.notify();
+    }
+
     /// Ctrl+C with text selected in the focused pane: copy it and clear the selection. False: nothing selected.
     pub fn copy_selection(&mut self, cx: &mut Context<Self>) -> bool {
         let Some(pane) = self.focused.clone() else { return false };
@@ -103,7 +116,22 @@ impl DroverApp {
     /// Clipboard text into the focused pane: line breaks as Enter (\r, as xterm does), wrapped in bracketed-paste
     /// markers when the program asked for them, so a multi-line paste doesn't run line by line.
     pub fn paste(&mut self, cx: &mut Context<Self>) {
-        let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else { return };
+        let item = cx.read_from_clipboard();
+        let text = match item.as_ref().and_then(|i| i.text()) {
+            Some(t) => t,
+            // An image alone (a screenshot): save it as a file and paste its path, which is how agents take images.
+            None => match item.as_ref().and_then(image_path_from) {
+                Some(Ok(path)) => path,
+                Some(Err(e)) => { self.toasts.error(e); cx.notify(); return; }
+                None => return,
+            },
+        };
+        let remote = self.focused.as_deref().and_then(|p| self.store.pane(p)).is_some_and(|p| !p.machine.is_empty() && p.machine != "local");
+        if remote && item.as_ref().is_some_and(|i| i.text().is_none()) {
+            self.toasts.error("Pasting an image into a remote machine's terminal is not supported yet.".into());
+            cx.notify();
+            return;
+        }
         let text = text.replace("\r\n", "\r").replace('\n', "\r");
         let bracketed = self.focused.as_ref().is_some_and(|p| {
             self.screens.lock().unwrap().get(p).is_some_and(|s| s.term().mode().contains(TermMode::BRACKETED_PASTE))
@@ -159,4 +187,21 @@ mod tests {
         assert_eq!(url_around(&cells, 1), None);
         assert_eq!(url_around(&"http:// nothing".chars().collect::<Vec<_>>(), 2), None);
     }
+}
+
+/// The clipboard's first image written to a temp file; its path, quoted when it has spaces. None = no image on it.
+fn image_path_from(item: &ClipboardItem) -> Option<Result<String, String>> {
+    let image = item.entries().iter().find_map(|e| match e { gpui::ClipboardEntry::Image(i) => Some(i), _ => None })?;
+    let ext = match image.format {
+        gpui::ImageFormat::Png => "png", gpui::ImageFormat::Jpeg => "jpg", gpui::ImageFormat::Webp => "webp",
+        gpui::ImageFormat::Gif => "gif", _ => "img",
+    };
+    let dir = std::env::temp_dir().join("drover-paste");
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let path = dir.join(format!("paste-{stamp}.{ext}"));
+    let written = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&path, &image.bytes));
+    Some(written.map(|_| {
+        let p = path.to_string_lossy().into_owned();
+        if p.contains(' ') { format!("\"{p}\"") } else { p }
+    }).map_err(|e| format!("Could not save the pasted image: {e}")))
 }

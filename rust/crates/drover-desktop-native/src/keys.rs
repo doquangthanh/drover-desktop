@@ -10,11 +10,11 @@ use crate::views::View;
 use crate::workspace_app::DroverApp;
 
 /// Shown by Ctrl+K Ctrl+S (dialogs.rs).
-pub const SHORTCUTS: [(&str, &str); 26] = [
+pub const SHORTCUTS: [(&str, &str); 27] = [
     ("Ctrl+Shift+P · F1", "All commands"), ("Ctrl+P", "Jump to a terminal or agent"), ("F2", "Rename the focused agent"),
     ("Ctrl+F", "Find in the focused terminal"),
     ("Ctrl+B", "Toggle sidebar"), ("Ctrl+,", "Settings"), ("Ctrl+K Ctrl+S", "Keyboard shortcuts"),
-    ("Ctrl+N · Ctrl+Shift+`", "New tab"), ("Ctrl+W", "Close tab"), ("Ctrl+Tab · Ctrl+PageDown", "Next tab"),
+    ("Ctrl+= · Ctrl+- · Ctrl+0", "Terminal text bigger · smaller · normal"), ("Ctrl+N · Ctrl+Shift+`", "New tab"), ("Ctrl+W", "Close tab"), ("Ctrl+Tab · Ctrl+PageDown", "Next tab"),
     ("Ctrl+Shift+Tab · Ctrl+PageUp", "Previous tab"), ("Alt+1–9", "Go to tab 1–9"),
     ("Ctrl+\\ · Ctrl+Shift+5", "Split right"), ("Ctrl+K Ctrl+\\", "Split down"), ("Ctrl+K W", "Close pane"),
     ("Ctrl+1–9", "Focus pane 1–9"), ("Ctrl+K Ctrl+←↑↓→", "Focus pane by direction"), ("Ctrl+K ← →", "Swap with previous / next pane"),
@@ -52,6 +52,9 @@ impl DroverApp {
             (_, true, _, "f8") => self.next_with_state("done", window, cx),
             (false, false, true, _) if digit.is_some() => self.go_to_tab(digit.unwrap_or(1) - 1, cx),
             (true, false, false, _) if digit.is_some() => self.go_to_pane(digit.unwrap_or(1) - 1, window, cx),
+            (true, _, false, "=" | "+") => self.zoom_terminal(1.0),
+            (true, false, false, "-" | "_") => self.zoom_terminal(-1.0),
+            (true, false, false, "0") => self.zoom_terminal(0.0),
             (true, false, false, "b") => self.sidebar_open = !self.sidebar_open,
             (true, false, false, ",") => self.set_view(View::Settings, window, cx),
             (true, false, false, "n") | (true, true, false, "`" | "~") => self.new_tab(cx),
@@ -99,15 +102,36 @@ impl DroverApp {
 
     pub fn step_tab(&mut self, by: isize, cx: &mut Context<Self>) {
         let Some(space) = self.space.clone() else { return };
-        let tabs: Vec<String> = self.store.tabs_of(&space).map(|t| t.id.clone()).collect();
+        let tabs: Vec<String> = self.store.tabs_of(&space).map(|t| t.id.clone())
+            .filter(|t| !self.settled.contains(t) || Some(t) == self.tab.as_ref()).collect();
         let Some(i) = tabs.iter().position(|t| Some(t) == self.tab.as_ref()) else { return };
         let next = (i as isize + by).rem_euclid(tabs.len() as isize) as usize;
         self.select_tab(tabs[next].clone(), cx);
     }
 
+    /// Put the shown tab away (Herdr's `tab.settle`): it keeps running, and comes back when shown or when an agent in
+    /// it needs you. The shown tab changes to the next one still listed; the last listed tab cannot be settled.
+    pub fn settle_current_tab(&mut self, cx: &mut Context<Self>) {
+        let (Some(space), Some(cur)) = (self.space.clone(), self.tab.clone()) else { return };
+        let others: Vec<String> = self.store.tabs_of(&space).map(|t| t.id.clone())
+            .filter(|t| *t != cur && !self.settled.contains(t)).collect();
+        let Some(next) = others.first().cloned() else {
+            self.toasts.error("This is the only tab in the list; open another one first.".into());
+            cx.notify();
+            return;
+        };
+        self.settled.insert(cur);
+        self.select_tab(next, cx);
+    }
+
+    pub fn unsettle_all(&mut self, cx: &mut Context<Self>) {
+        self.settled.clear();
+        cx.notify();
+    }
+
     fn go_to_tab(&mut self, index: usize, cx: &mut Context<Self>) {
         let Some(space) = self.space.clone() else { return };
-        let tab = self.store.tabs_of(&space).nth(index).map(|t| t.id.clone());
+        let tab = self.store.tabs_of(&space).filter(|t| !self.settled.contains(&t.id)).nth(index).map(|t| t.id.clone());
         if let Some(t) = tab {
             self.select_tab(t, cx);
         }

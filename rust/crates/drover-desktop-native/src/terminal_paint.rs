@@ -26,8 +26,8 @@ impl TermFont {
     }
 }
 
-const BG: u32 = 0x17191d;
-const FG: u32 = 0xd2d4d9;
+fn bg_default() -> u32 { crate::theme::pane() }
+fn fg_default() -> u32 { crate::theme::tfg() }
 const ANSI: [u32; 16] = [
     0x2c2e31, 0xdc8c95, 0xa6bd91, 0xd8be87, 0x96b2d7, 0xb5a2ce, 0x8cbdc3, 0xd2d4d9,
     0x818793, 0xe8a1a9, 0xb9cfa5, 0xe6cf9c, 0xaec5e4, 0xc8b7de, 0xa3cfd4, 0xf0f0f2,
@@ -52,8 +52,8 @@ fn color(c: Color, default: u32) -> u32 {
     match c {
         Color::Spec(rgb) => ((rgb.r as u32) << 16) | ((rgb.g as u32) << 8) | rgb.b as u32,
         Color::Indexed(i) => indexed(i),
-        Color::Named(NamedColor::Foreground) | Color::Named(NamedColor::BrightForeground) => FG,
-        Color::Named(NamedColor::Background) => BG,
+        Color::Named(NamedColor::Foreground) | Color::Named(NamedColor::BrightForeground) => fg_default(),
+        Color::Named(NamedColor::Background) => bg_default(),
         Color::Named(n) if (n as usize) < 16 => ANSI[n as usize],
         Color::Named(_) => default,
     }
@@ -134,11 +134,11 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
             if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
                 continue;
             }
-            let (mut fg, mut bg) = (color(cell.fg, FG), color(cell.bg, BG));
+            let (mut fg, mut bg) = (color(cell.fg, fg_default()), color(cell.bg, bg_default()));
             if cell.flags.contains(Flags::INVERSE) {
                 std::mem::swap(&mut fg, &mut bg);
             }
-            if bg != BG {
+            if bg != bg_default() {
                 let x = bounds.origin.x + cell_w * c as f32;
                 let w = if cell.flags.contains(Flags::WIDE_CHAR) { cell_w * 2. } else { cell_w };
                 window.paint_quad(fill(Bounds::new(point(x, y), size(w, lh)), hsla(bg)));
@@ -174,7 +174,7 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
         if let Some((_, cols)) = link.as_ref().filter(|(l, _)| *l == r as i32 - offset) {
             let under = Bounds::new(point(bounds.origin.x + cell_w * cols.start as f32, y + lh - px(2.)),
                                     size(cell_w * cols.len() as f32, px(1.)));
-            window.paint_quad(fill(under, hsla(FG)));
+            window.paint_quad(fill(under, hsla(fg_default())));
         }
     }
     let cur = grid.cursor.point;
@@ -184,7 +184,7 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
         window.paint_quad(fill(cursor, gpui::hsla(0., 0., 0.82, if focused { 0.8 } else { 0.3 })));
     }
     if let Some(text) = marked.filter(|t| !t.is_empty()) {
-        let mut run = run_for(Flags::UNDERLINE, FG, tf);
+        let mut run = run_for(Flags::UNDERLINE, fg_default(), tf);
         run.len = text.len();
         run.background_color = Some(hsla(0x2c3340));
         let line = ts.shape_line(SharedString::from(text.to_string()), px(tf.size), &[run], None);

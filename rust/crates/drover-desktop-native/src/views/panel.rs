@@ -4,7 +4,7 @@
 use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
 
 use super::{View, agents, changes, files};
-use crate::theme::{self, CHROME, DIM, MUTED};
+use crate::theme::{self, chrome, dim, muted};
 use crate::widgets::{icon, short_path};
 use crate::workspace_app::DroverApp;
 
@@ -57,13 +57,13 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
         (Some(s), None) => short_path(&s.cwd),
         _ => String::new(),
     };
-    let head = div().h(px(38.)).flex_none().flex().items_center().gap(px(8.)).px(px(12.)).bg(rgb(CHROME))
+    let head = div().h(px(38.)).flex_none().flex().items_center().gap(px(8.)).px(px(12.)).bg(rgb(chrome()))
         .border_b_1().border_color(theme::border())
-        .child(icon(view.icon(), 14., MUTED))
+        .child(icon(view.icon(), 14., muted()))
         .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(view.title()))
-        .child(div().flex_1().min_w_0().truncate().text_size(px(11.5)).text_color(rgb(DIM)).child(what))
+        .child(div().flex_1().min_w_0().truncate().text_size(px(11.5)).text_color(rgb(dim())).child(what))
         .child(div().size(px(22.)).rounded(px(5.)).flex().items_center().justify_center().hover(|d| d.bg(theme::hover()))
-            .child(icon("close", 12., DIM))
+            .child(icon("close", 12., dim()))
             .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.panel = None; cx.notify(); })));
     let body = match view {
         View::Agents => agents::panel_body(app, cx),
@@ -77,5 +77,5 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
             app.start_drag(crate::drag::Drag::Panel { x0: f32::from(ev.position.x), w0 }, cx);
         }));
     Some(div().relative().w(px(app.panel_width)).flex_none().flex().flex_col().min_h_0().border_l_1().border_color(theme::border())
-        .bg(rgb(theme::CANVAS)).child(head).child(body).child(edge))
+        .bg(rgb(theme::canvas())).child(head).child(body).child(edge))
 }

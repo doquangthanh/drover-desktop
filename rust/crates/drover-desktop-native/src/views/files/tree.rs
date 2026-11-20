@@ -3,18 +3,18 @@
 use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
 
 use super::Entry;
-use crate::theme::{self, ACCENT, DIM, DONE, ERROR, FG, YELLOW};
+use crate::theme::{self, accent, dim, done, error, fg, yellow};
 use crate::views::ui;
 use crate::widgets::icon;
 use crate::workspace_app::DroverApp;
 
 fn badge(s: &str) -> Div {
     let (text, color) = match s {
-        "A" => ("A", DONE),
-        "D" => ("D", ERROR),
-        "R" => ("R", ACCENT),
-        "?" => ("U", DONE),
-        _ => ("M", YELLOW),
+        "A" => ("A", done()),
+        "D" => ("D", error()),
+        "R" => ("R", accent()),
+        "?" => ("U", done()),
+        _ => ("M", yellow()),
     };
     div().flex_none().text_size(px(11.)).font_weight(FontWeight::SEMIBOLD).text_color(rgb(color)).child(text)
 }
@@ -24,11 +24,11 @@ fn row(app: &DroverApp, e: &Entry, depth: usize, label: String, status: Option<S
     let on = !e.dir && app.files.file.as_deref() == Some(e.path.as_str());
     let (path, dir) = (e.path.clone(), e.dir);
     ui::row(on).h(px(26.)).pl(px(8. + depth as f32 * 14.)).text_size(px(12.5))
-        .child(div().w(px(10.)).flex_none().text_color(rgb(DIM)).child(if e.dir { if open { "▾" } else { "▸" } } else { "" }))
-        .when(e.dir, |d| d.child(icon("folder", 13., DIM)))
-        .child(div().flex_1().min_w_0().truncate().text_color(rgb(FG)).child(label))
+        .child(div().w(px(10.)).flex_none().text_color(rgb(dim())).child(if e.dir { if open { "▾" } else { "▸" } } else { "" }))
+        .when(e.dir, |d| d.child(icon("folder", 13., dim())))
+        .child(div().flex_1().min_w_0().truncate().text_color(rgb(fg())).child(label))
         .children(status.map(|s| badge(&s)))
-        .when(dot, |d| d.child(div().size(px(5.)).rounded_full().bg(rgb(YELLOW))))
+        .when(dot, |d| d.child(div().size(px(5.)).rounded_full().bg(rgb(yellow()))))
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.files_pick(path.clone(), dir, cx)))
 }
 
@@ -49,7 +49,7 @@ pub fn panel(app: &DroverApp, name: &str, cx: &mut Context<DroverApp>) -> Div {
             let clean = p.trim_end_matches('/').to_string();
             let e = Entry { name: clean.clone(), path: clean.clone(), dir: false };
             if dir {
-                list = list.child(ui::row(false).h(px(26.)).text_size(px(12.5)).child(icon("folder", 13., DIM))
+                list = list.child(ui::row(false).h(px(26.)).text_size(px(12.5)).child(icon("folder", 13., dim()))
                     .child(div().flex_1().min_w_0().truncate().child(clean)).child(badge(s)));
             } else {
                 list = list.child(row(app, &e, 0, clean, Some((*s).clone()), false, cx));

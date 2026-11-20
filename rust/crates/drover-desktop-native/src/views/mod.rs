@@ -9,6 +9,8 @@ pub mod inbox;
 pub mod machines;
 pub mod panel;
 pub mod settings;
+pub mod settings_alerts;
+pub mod settings_look;
 pub mod text_input;
 pub mod ui;
 

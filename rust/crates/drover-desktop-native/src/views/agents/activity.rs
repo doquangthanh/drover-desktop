@@ -10,19 +10,19 @@ use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, relative,
 
 use super::Tab;
 use super::inspector::{label, state_color, state_label};
-use crate::theme::{self, ACCENT, BLOCKED, DIM, DONE, ERROR, FG, MUTED, WORKING, tint};
+use crate::theme::{self, accent, blocked, dim, done, error, fg, muted, working, tint};
 use crate::views::ui;
 use crate::widgets::{age, kind_icon};
 use crate::workspace_app::DroverApp;
 
 fn kind_color(kind: &str) -> u32 {
     match kind {
-        "spawn" => ACCENT,
-        "send" | "keys" => WORKING,
-        "done" | "sub-done" => DONE,
-        "blocked" => BLOCKED,
-        "denied" | "exited" => ERROR,
-        _ => MUTED,
+        "spawn" => accent(),
+        "send" | "keys" => working(),
+        "done" | "sub-done" => done(),
+        "blocked" => blocked(),
+        "denied" | "exited" => error(),
+        _ => muted(),
     }
 }
 
@@ -36,7 +36,7 @@ fn flow(app: &DroverApp, messages: &[AgentMessage], lanes: &[String], focus: Opt
         heads = heads.child(div().flex_1().min_w_0().flex().flex_col().items_center().gap(px(3.)).py(px(8.))
             .child(match p { Some(p) => kind_icon(&p.kind), None => div().size(px(14.)) })
             .child(div().max_w_full().truncate().text_size(px(12.)).child(if p.is_some() { label(p) } else { "You".into() }))
-            .child(div().text_size(px(10.5)).text_color(rgb(p.map(|p| state_color(&p.state)).unwrap_or(DIM)))
+            .child(div().text_size(px(10.5)).text_color(rgb(p.map(|p| state_color(&p.state)).unwrap_or(dim())))
                 .child(p.map(state_label).unwrap_or_default())));
     }
     let mut rows = div().id("agents-flow").flex_1().min_h_0().overflow_y_scroll().flex().flex_col();
@@ -54,7 +54,7 @@ fn flow(app: &DroverApp, messages: &[AgentMessage], lanes: &[String], focus: Opt
                 .child(div().max_w_full().truncate().px(px(6.)).rounded(px(5.)).text_size(px(11.)).bg(tint(color, 0.16))
                     .text_color(rgb(color)).child(pill_text)));
         rows = rows.child(div().h(px(40.)).flex_none().flex().when(dim, |d| d.opacity(0.35))
-            .child(div().w(px(56.)).flex_none().pl(px(10.)).pt(px(12.)).text_size(px(11.)).text_color(rgb(DIM)).child(age(m.at)))
+            .child(div().w(px(56.)).flex_none().pl(px(10.)).pt(px(12.)).text_size(px(11.)).text_color(rgb(crate::theme::dim())).child(age(m.at)))
             .child(track));
     }
     if messages.is_empty() {
@@ -69,14 +69,14 @@ fn messages_list(app: &DroverApp, messages: &[AgentMessage]) -> Div {
     let mut list = div().id("agents-messages").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().px(px(14.)).py(px(6.));
     for m in messages.iter().rev() {
         list = list.child(div().flex().gap(px(10.)).py(px(7.)).border_b_1().border_color(theme::border())
-            .child(div().w(px(36.)).flex_none().text_size(px(11.)).text_color(rgb(DIM)).child(age(m.at)))
+            .child(div().w(px(36.)).flex_none().text_size(px(11.)).text_color(rgb(dim())).child(age(m.at)))
             .child(div().size(px(7.)).mt(px(5.)).flex_none().rounded_full().bg(rgb(kind_color(&m.kind))))
             .child(div().flex_1().min_w_0().flex().flex_col().gap(px(3.))
                 .child(div().flex().flex_wrap().gap(px(4.))
                     .child(div().font_weight(FontWeight::SEMIBOLD).child(name(&m.source)))
-                    .child(div().text_color(rgb(MUTED)).child(agent_tree::message_verb(&m.kind).to_string()))
+                    .child(div().text_color(rgb(muted())).child(agent_tree::message_verb(&m.kind).to_string()))
                     .child(div().font_weight(FontWeight::SEMIBOLD).child(name(&m.target))))
-                .when(!m.text.is_empty(), |d| d.child(div().text_size(px(11.5)).text_color(rgb(DIM)).child(m.text.clone())))));
+                .when(!m.text.is_empty(), |d| d.child(div().text_size(px(11.5)).text_color(rgb(dim())).child(m.text.clone())))));
     }
     if messages.is_empty() {
         list = list.child(ui::note("No agent-to-agent activity yet. Agents use `dr run`, `dr wait`, `dr send`.", false));
@@ -94,15 +94,15 @@ fn policy(app: &DroverApp) -> Div {
     let max = o["max_panes"].as_i64().filter(|n| *n > 0).map(|n| n.to_string()).unwrap_or("no limit".into());
     let tile = |k: &str, v: String| div().flex_1().min_w(px(180.)).p(px(12.)).flex().flex_col().gap(px(4.)).rounded(px(8.))
         .border_1().border_color(theme::border())
-        .child(div().text_size(px(11.)).text_color(rgb(DIM)).child(k.to_string()))
-        .child(div().text_size(px(14.)).text_color(rgb(FG)).child(v));
+        .child(div().text_size(px(11.)).text_color(rgb(dim())).child(k.to_string()))
+        .child(div().text_size(px(14.)).text_color(rgb(fg())).child(v));
     div().flex().flex_col().gap(px(10.)).p(px(14.))
         .child(div().flex().flex_wrap().gap(px(8.))
             .child(tile("Agents may answer prompts", show(&o["agents_may_answer_permission_prompts"], "ask-user")))
             .child(tile("Max agents", max))
             .child(tile("Max depth", show(&o["max_depth"], "?")))
             .child(tile("Stop helpers with parent", o["kill_children_on_parent_exit"].as_bool().unwrap_or(false).to_string())))
-        .child(div().text_size(px(12.)).text_color(rgb(DIM)).child("Edit these under [orchestration] in settings.toml."))
+        .child(div().text_size(px(12.)).text_color(rgb(dim())).child("Edit these under [orchestration] in settings.toml."))
 }
 
 pub fn activity(app: &DroverApp, pane: &Pane, tree: &[String], cx: &mut Context<DroverApp>) -> Div {
@@ -135,6 +135,6 @@ pub fn activity(app: &DroverApp, pane: &Pane, tree: &[String], cx: &mut Context<
     };
     div().flex().flex_col().flex_1().min_h_0()
         .child(div().h(px(42.)).flex_none().flex().items_center().justify_between().px(px(12.)).border_b_1().border_color(theme::border())
-            .child(tabs).child(div().text_size(px(11.5)).text_color(rgb(DIM)).child(count)))
+            .child(tabs).child(div().text_size(px(11.5)).text_color(rgb(dim())).child(count)))
         .child(body)
 }

@@ -11,7 +11,7 @@ use gpui::{
 use serde_json::json;
 
 use crate::terminal_paint;
-use crate::theme::{self, ACCENT, DIM, PANE};
+use crate::theme::{self, accent, dim, pane};
 use crate::widgets::{icon, kind_icon, short_path, state_mark};
 use crate::workspace_app::DroverApp;
 
@@ -19,9 +19,22 @@ pub fn tab_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let body = div().flex().flex_1().min_h_0().min_w_0().p(px(8.));
     match app.tab.clone().and_then(|t| app.store.tab_view(&t).map(|n| (t, n))) {
         Some((tab, node)) => body.child(node_view(app, &node, &tab, String::new(), cx)),
-        None => body.items_center().justify_center().text_color(rgb(DIM))
+        None if app.connected && app.store.spaces.is_empty() => body.items_center().justify_center().child(welcome(cx)),
+        None => body.items_center().justify_center().text_color(rgb(dim()))
             .child(if app.connected { "No terminal in this space yet" } else { "Waiting for drover-server…" }),
     }
+}
+
+/// The first screen, before any space exists (Herdr's welcome): what a space, tab and pane are, and where to start.
+fn welcome(cx: &mut Context<DroverApp>) -> gpui::Div {
+    let line = |t: &str| div().text_size(px(12.5)).text_color(rgb(crate::theme::muted())).child(t.to_string());
+    div().w(px(440.)).p(px(26.)).flex().flex_col().gap(px(10.)).rounded(px(12.)).bg(rgb(crate::theme::card())).border_1().border_color(crate::theme::border2())
+        .child(div().text_size(px(17.)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(rgb(crate::theme::fg())).child("Welcome to Drover"))
+        .child(line("A space holds work on one machine, usually one repo. Each space has tabs; split a tab into panes to put terminals side by side."))
+        .child(line("Agents (Claude, Codex, …) show their state in the sidebar: working, needs you, done."))
+        .child(div().flex().pt(px(4.)).child(crate::views::ui::button("New space", crate::views::ui::Kind::Primary)
+            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|app, _, _, cx| app.new_space(cx)))))
+        .child(div().text_size(px(11.5)).text_color(rgb(dim())).child("Ctrl+Shift+P: all commands · Ctrl+K Ctrl+S: keyboard shortcuts"))
 }
 
 /// A split draws its two sides around a gutter: drag it to resize, double-click to even it out (drag.rs).
@@ -70,16 +83,16 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
     let (click_id, wheel_id) = (id.clone(), id.clone());
     let (split_id, down_id, zoom_id, close_id) = (id.clone(), id.clone(), id.clone(), id.clone());
     let hbtn = |n: &str| div().size(px(22.)).rounded(px(5.)).flex().items_center().justify_center()
-        .hover(|d| d.bg(theme::hover())).child(icon(n, 13., DIM));
+        .hover(|d| d.bg(theme::hover())).child(icon(n, 13., dim()));
     div().flex().flex_col().flex_1().min_w_0().min_h_0().rounded(px(10.)).overflow_hidden()
-        .border_1().when(focused, |d| d.border_color(rgb(ACCENT))).when(!focused, |d| d.border_color(theme::border())).bg(rgb(PANE))
+        .border_1().when(focused, |d| d.border_color(rgb(accent()))).when(!focused, |d| d.border_color(theme::border())).bg(rgb(pane()))
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| app.focus_pane(click_id.clone(), window, cx)))
         .on_scroll_wheel(cx.listener(move |app, ev, _, cx| app.on_wheel(&wheel_id, ev, cx)))
         .child(div().h(px(30.)).flex_none().flex().items_center().gap(px(8.)).pl(px(10.)).pr(px(6.))
             .border_b_1().border_color(theme::border()).text_size(px(12.)).font_family(theme::UI_FONT)
             .child(kind_icon(&kind))
             .child(div().flex_none().font_weight(gpui::FontWeight::MEDIUM).child(name))
-            .child(div().flex_1().min_w_0().truncate().text_color(rgb(DIM)).child(short_path(&cwd)))
+            .child(div().flex_1().min_w_0().truncate().text_color(rgb(dim())).child(short_path(&cwd)))
             .child(state_mark(&state, exit, gpui::SharedString::from(format!("ph-{pane_id}"))))
             .child(hbtn("split").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.split(&split_id, "row"); })))
             .child(hbtn("splitdown").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.split(&down_id, "col"); })))

@@ -6,7 +6,7 @@ use drover_proto::wire::Pane;
 use gpui::{Context, Div, MouseButton, div, prelude::*, px, rgb};
 use serde_json::json;
 
-use crate::theme::{self, ACCENT, BLOCKED, DIM, FG, MUTED, YELLOW, tint};
+use crate::theme::{self, accent, blocked, dim, fg, muted, yellow, tint};
 use crate::views::ui::{self, Kind};
 use crate::widgets::{kind_icon, state_mark};
 use crate::workspace_app::DroverApp;
@@ -18,8 +18,8 @@ fn agent_in<'a>(app: &'a DroverApp, path: &str) -> Option<&'a Pane> {
 
 fn count(t: &Worktree) -> Div {
     match t.changes.filter(|n| *n > 0) {
-        Some(n) => div().text_color(rgb(YELLOW)).child(format!("{n} files")),
-        None => div().text_color(rgb(DIM)).child("clean"),
+        Some(n) => div().text_color(rgb(yellow())).child(format!("{n} files")),
+        None => div().text_color(rgb(dim())).child("clean"),
     }
 }
 
@@ -28,21 +28,21 @@ fn row(app: &DroverApp, t: &Worktree, agent: Option<&Pane>, on: bool, cx: &mut C
     let branch = t.branch.clone().unwrap_or("(detached)".into());
     let top = div().flex().items_center().gap(px(7.))
         .children(agent.map(|a| kind_icon(&a.kind)))
-        .child(div().flex_1().min_w_0().truncate().text_color(rgb(FG)).child(agent.map(|a| a.name.clone()).unwrap_or(branch.clone())))
+        .child(div().flex_1().min_w_0().truncate().text_color(rgb(fg())).child(agent.map(|a| a.name.clone()).unwrap_or(branch.clone())))
         .child(match agent {
             Some(a) => div().child(state_mark(&a.state, a.exit_code, gpui::SharedString::from(format!("wt-{}", a.id)))),
-            None if t.missing => div().text_size(px(11.)).text_color(rgb(DIM)).child("folder deleted"),
+            None if t.missing => div().text_size(px(11.)).text_color(rgb(dim())).child("folder deleted"),
             None => count(t).text_size(px(11.)),
         });
     let sub = match agent {
-        Some(_) => div().flex().gap(px(4.)).child(div().text_color(rgb(if on { ACCENT } else { DIM })).child(branch)).child("·").child(count(t)),
+        Some(_) => div().flex().gap(px(4.)).child(div().text_color(rgb(if on { accent() } else { dim() })).child(branch)).child("·").child(count(t)),
         None => div().truncate().child(t.path.clone()),
     };
     let _ = app;
     div().flex_none().flex().flex_col().gap(px(3.)).px(px(10.)).py(px(8.)).rounded(px(8.))
         .when(t.missing, |d| d.opacity(0.5))
         .when(on, |d| d.bg(theme::selected())).when(!on && !t.missing, |d| d.hover(|d| d.bg(theme::hover())))
-        .child(top).child(sub.text_size(px(11.)).text_color(rgb(DIM)))
+        .child(top).child(sub.text_size(px(11.)).text_color(rgb(dim())))
         .when(!t.missing, |d| d.on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {
             app.changes.picked_path = Some(path.clone());
             app.changes.picked_file = None;
@@ -88,9 +88,9 @@ pub fn panel(app: &DroverApp, trees: &[Worktree], path: Option<&str>, cx: &mut C
             } else {
                 format!("{} will be deleted.", t.path)
             };
-            foot = foot.child(div().flex().flex_col().gap(px(8.)).p(px(10.)).rounded(px(8.)).bg(tint(BLOCKED, 0.1))
-                .child(div().text_color(rgb(FG)).child(format!("Remove “{name}”?")))
-                .child(div().text_size(px(12.)).text_color(rgb(MUTED)).child(detail))
+            foot = foot.child(div().flex().flex_col().gap(px(8.)).p(px(10.)).rounded(px(8.)).bg(tint(blocked(), 0.1))
+                .child(div().text_color(rgb(fg())).child(format!("Remove “{name}”?")))
+                .child(div().text_size(px(12.)).text_color(rgb(muted())).child(detail))
                 .child(div().flex().gap(px(8.))
                     .child(ui::button(if dirty { "Remove anyway" } else { "Remove" }, Kind::Danger)
                         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {

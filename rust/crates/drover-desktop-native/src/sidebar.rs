@@ -4,24 +4,24 @@ use std::sync::Arc;
 
 use gpui::{Context, Div, FontWeight, Image, ImageFormat, MouseButton, div, img, prelude::*, px, rgb};
 
-use crate::theme::{self, BLOCKED, CHROME, DIM, DONE, FG, MUTED, UI_FONT};
+use crate::theme::{self, chrome, dim, done, fg, muted, UI_FONT};
 use crate::widgets::{age, avatar, icon, kind_icon, state_mark};
 use crate::views::View;
 use crate::workspace_app::DroverApp;
 
 fn ibtn(name: &str) -> Div {
     div().size(px(26.)).rounded(px(6.)).flex().items_center().justify_center().hover(|d| d.bg(theme::hover()))
-        .child(icon(name, 15., DIM))
+        .child(icon(name, 15., dim()))
 }
 
 fn shead(title: &str) -> Div {
     div().h(px(31.)).flex_none().flex().items_center().justify_between().pl(px(16.)).pr(px(10.))
-        .text_size(px(11.5)).text_color(rgb(DIM)).child(title.to_string())
+        .text_size(px(11.5)).text_color(rgb(dim())).child(title.to_string())
 }
 
 /// One clickable row (`.srow`): 30 px high, radius 8, hover/selected tints.
 fn srow(on: bool) -> Div {
-    div().h(px(30.)).flex().items_center().gap(px(9.)).px(px(8.)).rounded(px(8.)).text_color(rgb(FG))
+    div().h(px(30.)).flex().items_center().gap(px(9.)).px(px(8.)).rounded(px(8.)).text_color(rgb(fg()))
         .when(on, |d| d.bg(theme::selected())).when(!on, |d| d.hover(|d| d.bg(theme::hover())))
 }
 
@@ -34,21 +34,21 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .child(ibtn("sidebar").on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.sidebar_open = false; cx.notify(); })));
 
     let mut spaces = div().flex().flex_col().px(px(8.)).pb(px(10.));
-    spaces = spaces.child(div().h(px(26.)).flex().items_center().gap(px(7.)).px(px(8.)).text_size(px(11.)).text_color(rgb(DIM))
-        .child(icon("monitor", 13., DIM)).child(div().flex_1().child("This computer"))
-        .child(div().on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_space(cx))).child(icon("plus", 13., DIM)))
-        .child(div().size(px(6.)).rounded_full().bg(rgb(if app.connected { DONE } else { theme::ERROR })))
+    spaces = spaces.child(div().h(px(26.)).flex().items_center().gap(px(7.)).px(px(8.)).text_size(px(11.)).text_color(rgb(dim()))
+        .child(icon("monitor", 13., dim())).child(div().flex_1().child("This computer"))
+        .child(div().on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_space(cx))).child(icon("plus", 13., dim())))
+        .child(div().size(px(6.)).rounded_full().bg(rgb(if app.connected { done() } else { theme::error() })))
     );
     for s in &app.store.spaces {
         let on = app.space.as_deref() == Some(s.id.as_str());
         let (id, close_id) = (s.id.clone(), s.id.clone());
         let state = app.store.space_state(&s.id).to_string();
-        let mut git = div().flex_none().ml_auto().flex().items_center().gap(px(5.)).text_size(px(11.5)).text_color(rgb(DIM));
+        let mut git = div().flex_none().ml_auto().flex().items_center().gap(px(5.)).text_size(px(11.5)).text_color(rgb(dim()));
         if let Some(b) = s.branch.as_ref() {
             git = git.child(div().max_w(px(130.)).truncate().child(b.clone()));
         }
         if s.dirty.unwrap_or(0) > 0 {
-            git = git.child(div().size(px(5.)).rounded_full().bg(rgb(theme::YELLOW)));
+            git = git.child(div().size(px(5.)).rounded_full().bg(rgb(theme::yellow())));
         }
         if matches!(state.as_str(), "working" | "blocked") {
             git = git.child(state_mark(&state, None, gpui::SharedString::from(format!("sp-{}", s.id))));
@@ -56,7 +56,7 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         // Shown on the selected row only, so other rows keep their width for the name (middle click closes any).
         let close = div().size(px(18.)).flex_none().rounded(px(5.)).flex().items_center().justify_center()
             .hover(|d| d.bg(theme::hover()))
-            .child(icon("close", 11., DIM))
+            .child(icon("close", 11., dim()))
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_space(&close_id, cx); }));
         let middle_id = s.id.clone();
         spaces = spaces.child(srow(on).child(avatar(&s.name, s.color))
@@ -72,13 +72,13 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         if list.is_empty() {
             continue;
         }
-        agents = agents.child(div().h(px(24.)).flex().items_center().px(px(8.)).text_size(px(11.)).text_color(rgb(DIM)).child(s.name.clone()));
+        agents = agents.child(div().h(px(24.)).flex().items_center().px(px(8.)).text_size(px(11.)).text_color(rgb(dim())).child(s.name.clone()));
         for p in list {
             let on = app.focused.as_deref() == Some(p.id.as_str());
             let pane_id = p.id.clone();
             agents = agents.child(srow(on).child(kind_icon(&p.kind))
-                .child(div().flex_1().min_w_0().truncate().when(p.state == "idle", |d| d.text_color(rgb(MUTED))).child(p.name.clone()))
-                .child(div().flex_none().text_size(px(11.)).text_color(rgb(DIM)).child(age(p.since)))
+                .child(div().flex_1().min_w_0().truncate().when(p.state == "idle", |d| d.text_color(rgb(muted()))).child(p.name.clone()))
+                .child(div().flex_none().text_size(px(11.)).text_color(rgb(dim())).child(age(p.since)))
                 .child(state_mark(&p.state, p.exit_code, gpui::SharedString::from(format!("ag-{}", p.id))))
                 .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| {
                     app.show_pane(&pane_id);
@@ -91,13 +91,13 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let blocked = app.store.panes.iter().filter(|p| p.state == "blocked").count();
     let foot_row = |view: View| {
         let on = app.view == view;
-        div().h(px(28.)).flex().items_center().gap(px(9.)).px(px(8.)).rounded(px(8.)).text_color(rgb(if on { FG } else { MUTED }))
+        div().h(px(28.)).flex().items_center().gap(px(9.)).px(px(8.)).rounded(px(8.)).text_color(rgb(if on { fg() } else { muted() }))
             .when(on, |d| d.bg(theme::selected())).hover(|d| d.bg(theme::hover()))
-            .child(icon(view.icon(), 15., if on { FG } else { MUTED })).child(div().flex_1().child(view.title()))
+            .child(icon(view.icon(), 15., if on { fg() } else { muted() })).child(div().flex_1().child(view.title()))
     };
     let show = |view: View| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, window: &mut gpui::Window, cx: &mut Context<DroverApp>| app.set_view(view, window, cx));
     let foot = div().flex_none().border_t_1().border_color(theme::border()).pt(px(4.)).px(px(8.)).pb(px(8.))
-        .child(foot_row(View::Inbox).when(blocked > 0, |d| d.child(div().text_size(px(11.)).text_color(rgb(BLOCKED)).child(blocked.to_string())))
+        .child(foot_row(View::Inbox).when(blocked > 0, |d| d.child(div().text_size(px(11.)).text_color(rgb(crate::theme::blocked())).child(blocked.to_string())))
             .on_mouse_down(MouseButton::Left, show(View::Inbox)))
         .child(foot_row(View::Machines).on_mouse_down(MouseButton::Left, show(View::Machines)))
         .child(foot_row(View::Settings).on_mouse_down(MouseButton::Left, show(View::Settings)));
@@ -109,13 +109,13 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| {
             app.start_drag(crate::drag::Drag::Sidebar { x0: f32::from(ev.position.x), w0 }, cx);
         }));
-    div().relative().w(px(app.sidebar_width)).flex_none().flex().flex_col().bg(rgb(CHROME)).border_r_1().border_color(theme::border())
+    div().relative().w(px(app.sidebar_width)).flex_none().flex().flex_col().bg(rgb(chrome())).border_r_1().border_color(theme::border())
         .font_family(UI_FONT).text_size(px(13.)).child(edge)
         .child(brand)
         .child(half().child(shead("Spaces").child(div().on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_space(cx)))
-            .child(icon("plus", 14., DIM)))).child(spaces))
+            .child(icon("plus", 14., dim())))).child(spaces))
         .child(half().border_t_1().border_color(theme::border()).child(shead("Agents").child(div().rounded(px(5.)).hover(|d| d.bg(theme::hover()))
-            .child(icon("layers", 14., DIM))
+            .child(icon("layers", 14., dim()))
             .on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.set_view(View::Agents, window, cx))))).child(agents))
         .child(foot)
 }

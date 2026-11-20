@@ -4,7 +4,7 @@ use drover_proto::agent_tree::{self, TreeRow};
 use drover_proto::wire::Pane;
 use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
 
-use crate::theme::{self, BLOCKED, DIM, DONE, FG, MUTED, WORKING};
+use crate::theme::{self, blocked, dim, done, fg, muted, working};
 use crate::views::ui;
 use crate::widgets::{age, kind_icon, state_mark};
 use crate::workspace_app::DroverApp;
@@ -40,15 +40,15 @@ fn row(app: &DroverApp, r: &TreeRow, p: &Pane, on: bool, cx: &mut Context<Drover
     for g in &r.guides {
         line = line.child(guide(*g));
     }
-    line.child(div().w(px(12.)).flex_none().text_color(rgb(DIM)).text_size(px(11.)).child(if r.last { "└" } else { "├" }))
+    line.child(div().w(px(12.)).flex_none().text_color(rgb(dim())).text_size(px(11.)).child(if r.last { "└" } else { "├" }))
         .child(div().flex_none().mr(px(8.)).child(kind_icon(&p.kind)))
         .child(div().flex_1().min_w_0().flex().flex_col()
-            .child(div().truncate().text_color(rgb(FG)).when(p.parent.is_none(), |d| d.font_weight(FontWeight::SEMIBOLD))
+            .child(div().truncate().text_color(rgb(fg())).when(p.parent.is_none(), |d| d.font_weight(FontWeight::SEMIBOLD))
                 .child(if p.name.is_empty() { p.id.clone() } else { p.name.clone() }))
-            .when(!sub.is_empty(), |d| d.child(div().truncate().text_size(px(11.)).text_color(rgb(DIM)).child(sub))))
+            .when(!sub.is_empty(), |d| d.child(div().truncate().text_size(px(11.)).text_color(rgb(dim())).child(sub))))
         .child(div().flex_none().flex().items_center().gap(px(6.)).ml(px(6.))
             .child(state_mark(&p.state, p.exit_code, gpui::SharedString::from(format!("at-{}", p.id))))
-            .child(div().text_size(px(11.)).text_color(rgb(DIM)).child(meta(p))))
+            .child(div().text_size(px(11.)).text_color(rgb(dim())).child(meta(p))))
 }
 
 pub fn list(app: &DroverApp, rows: &[TreeRow], agents: &[&Pane], sel: Option<&str>, cx: &mut Context<DroverApp>) -> Div {
@@ -57,19 +57,19 @@ pub fn list(app: &DroverApp, rows: &[TreeRow], agents: &[&Pane], sel: Option<&st
     let roots = rows.iter().filter(|r| r.guides.is_empty()).count();
     let head = div().flex_none().flex().flex_col().gap(px(10.)).p(px(12.)).border_b_1().border_color(theme::border())
         .child(div().flex().items_center().justify_between().text_size(px(11.))
-            .child(div().text_color(rgb(MUTED)).font_weight(FontWeight::SEMIBOLD).child(format!("AGENTS · {}", agents.len())))
+            .child(div().text_color(rgb(muted())).font_weight(FontWeight::SEMIBOLD).child(format!("AGENTS · {}", agents.len())))
             .child(div().flex().gap(px(10.))
-                .child(count(agent_tree::state_count(agents, "working"), WORKING))
-                .child(count(agent_tree::state_count(agents, "blocked"), BLOCKED))
-                .child(count(agent_tree::state_count(agents, "done"), DONE))
-                .child(count(agent_tree::state_count(agents, "idle"), DIM))))
+                .child(count(agent_tree::state_count(agents, "working"), working()))
+                .child(count(agent_tree::state_count(agents, "blocked"), blocked()))
+                .child(count(agent_tree::state_count(agents, "done"), done()))
+                .child(count(agent_tree::state_count(agents, "idle"), dim()))))
         .child(app.agents_filter.clone());
     let you = div().h(px(40.)).flex_none().flex().items_center().gap(px(8.)).px(px(8.))
-        .child(div().size(px(22.)).rounded(px(6.)).bg(rgb(theme::RAISED)).flex().items_center().justify_center()
-            .text_size(px(9.)).text_color(rgb(MUTED)).child("you"))
+        .child(div().size(px(22.)).rounded(px(6.)).bg(rgb(theme::raised())).flex().items_center().justify_center()
+            .text_size(px(9.)).text_color(rgb(muted())).child("you"))
         .child(div().flex().flex_col()
             .child(div().font_weight(FontWeight::SEMIBOLD).child("You"))
-            .child(div().text_size(px(11.)).text_color(rgb(DIM)).child(format!("started {roots} agent{}", if roots == 1 { "" } else { "s" }))));
+            .child(div().text_size(px(11.)).text_color(rgb(dim())).child(format!("started {roots} agent{}", if roots == 1 { "" } else { "s" }))));
     let mut body = div().id("agents-tree").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().p(px(6.)).child(you);
     for r in &shown {
         if let Some(p) = agents.iter().find(|p| p.id == r.id) {

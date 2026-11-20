@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpui::{Animation, AnimationExt, Div, IntoElement, Styled, Svg, Transformation, div, percentage, prelude::*, px, rgb, svg};
 
-use crate::theme::{self, AVATAR, BLOCKED, DIM, DONE, ERROR, WORKING, kind_badge, tint};
+use crate::theme::{self, AVATAR, blocked, dim, done, error, working, kind_badge, tint};
 
 pub fn icon(name: &str, size: f32, color: u32) -> Svg {
     svg().path(format!("icons/{name}.svg")).size(px(size)).flex_none().text_color(rgb(color))
@@ -33,14 +33,14 @@ fn pill(text: String, color: u32) -> Div {
 /// What a pane's state looks like next to its name (`state-mark.tsx`).
 pub fn state_mark(state: &str, exit_code: Option<i64>, id: impl Into<gpui::ElementId>) -> gpui::AnyElement {
     match state {
-        "blocked" => pill("Needs you".into(), BLOCKED).into_any_element(),
-        "working" => icon("spin", 11., WORKING)
+        "blocked" => pill("Needs you".into(), blocked()).into_any_element(),
+        "working" => icon("spin", 11., working())
             .with_animation(id, Animation::new(Duration::from_millis(900)).repeat(),
                             |s, t| s.with_transformation(Transformation::rotate(percentage(t))))
             .into_any_element(),
-        "done" => div().size(px(6.)).rounded_full().flex_none().bg(rgb(DONE)).into_any_element(),
-        "exited" => pill(exit_code.filter(|c| *c != 0).map(|c| format!("exit {c}")).unwrap_or("exited".into()), ERROR).into_any_element(),
-        _ => div().size(px(7.)).rounded_full().flex_none().border(px(1.5)).border_color(rgb(DIM)).into_any_element(),
+        "done" => div().size(px(6.)).rounded_full().flex_none().bg(rgb(done())).into_any_element(),
+        "exited" => pill(exit_code.filter(|c| *c != 0).map(|c| format!("exit {c}")).unwrap_or("exited".into()), error()).into_any_element(),
+        _ => div().size(px(7.)).rounded_full().flex_none().border(px(1.5)).border_color(rgb(dim())).into_any_element(),
     }
 }
 
@@ -69,5 +69,5 @@ pub fn short_path(path: &str) -> String {
 /// A key cap like the status bar's `Ctrl+K` hint.
 pub fn key_cap(text: &str) -> Div {
     div().h(px(17.)).px(px(5.)).rounded(px(4.)).flex().items_center().border_1().border_color(theme::border2())
-        .text_size(px(10.5)).text_color(rgb(DIM)).child(text.to_string())
+        .text_size(px(10.5)).text_color(rgb(dim())).child(text.to_string())
 }

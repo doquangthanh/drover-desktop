@@ -42,7 +42,10 @@ pub const WEB_VIEWS: [&str; 7] = ["inbox", "changes", "files", "machines", "sett
 impl DroverApp {
     pub fn rpc(&self, method: &str, params: Value) {
         trace(&format!("rpc {method} {params}"));
-        let _ = self.client.commands.send(Command::Rpc { method: method.into(), params, reply: None });
+        // Fire and forget, except that a failure is shown as a toast (take_replies).
+        let (tx, rx) = channel();
+        let _ = self.client.commands.send(Command::Rpc { method: method.into(), params, reply: Some(tx) });
+        self.fired.lock().unwrap().push(rx);
     }
 
     fn rpc_then(&mut self, method: &str, params: Value, then: fn(&mut DroverApp, Value)) {
@@ -75,7 +78,20 @@ impl DroverApp {
                 Err(_) => ready.push((then, Err("drover-server went away".into()))),
             }
         }
-        let ran = !ready.is_empty();
+        let errors: Vec<String> = {
+            let mut fired = self.fired.lock().unwrap();
+            let mut errors = vec![];
+            fired.retain(|rx| match rx.try_recv() {
+                Ok(r) => { errors.extend(r.err()); false }
+                Err(std::sync::mpsc::TryRecvError::Empty) => true,
+                Err(_) => false,
+            });
+            errors
+        };
+        let ran = !ready.is_empty() || !errors.is_empty();
+        for e in errors {
+            self.toasts.error(e);
+        }
         for (then, r) in ready {
             then(self, r);
         }

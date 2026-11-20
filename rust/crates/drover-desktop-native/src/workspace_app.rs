@@ -76,6 +76,21 @@ pub struct DroverApp {
     /// Give the keys back to the terminals on the next frame (a tab or pane was shown, a pop-up closed). Only then:
     /// a field in a panel keeps its focus while you type.
     pub want_term_focus: bool,
+    /// In-app toasts (toasts.rs) and whether this window is the active one (set while painting).
+    pub toasts: crate::toasts::Toasts,
+    /// Replies of fire-and-forget requests: only their errors matter (toasts).
+    pub fired: Mutex<Vec<std::sync::mpsc::Receiver<Result<serde_json::Value, String>>>>,
+    /// Inbox machine filter: "" = all, "local", or a machine alias.
+    pub inbox_machine: String,
+    pub window_active: bool,
+    /// Tabs put away on this screen (tab settle): hidden from the tab bar and skipped by next / previous, still running.
+    pub settled: std::collections::HashSet<String>,
+    /// Terminal text zoom: the size the daemon / default gives, plus the points added with Ctrl+= / Ctrl+-.
+    pub base_size: f32,
+    /// The theme name last reported by the daemon or picked in Settings ("dark", "light", "midnight", "auto").
+    pub theme_choice: String,
+    pub daemon_theme: String,
+    pub zoom: f32,
 }
 
 impl DroverApp {
@@ -115,7 +130,8 @@ impl DroverApp {
                     settings: Default::default(), machines_form,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panel: None,
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
-                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true }
+                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true,
+                    toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), base_size: 13.0, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 
     fn drain(&mut self) -> bool {
@@ -128,13 +144,23 @@ impl DroverApp {
                 Incoming::Event { name, data } => {
                     if matches!(name.as_str(), "state" | "resync") {
                         self.follow_terminal_font(&data["terminal_font"]);
+                        // Follow the daemon only when its theme changes: it reloads settings.toml a moment after a pick made here,
+                        // and the state events in between still carry the old one.
+                        if let Some(t) = data["theme"].as_str().filter(|t| *t != self.daemon_theme) {
+                            self.daemon_theme = t.to_string();
+                            crate::theme::set_theme(t);
+                            self.theme_choice = t.to_string();
+                        }
                     }
+                    self.toast_for_event(&name, &data);
                     self.store.apply(&name, &data);
                     self.fit_screens();
                 }
                 Incoming::Output { pane, data, replay } => self.feed(&pane, &data, replay),
             }
         }
+        changed |= self.toasts.tick();
+        self.check_update_when_due();
         changed |= self.take_replies();
         changed |= crate::views::files::tick(self);
         if let Some(id) = self.show_when_known.clone().filter(|id| self.store.pane(id).is_some()) {
@@ -178,9 +204,22 @@ impl DroverApp {
     fn follow_terminal_font(&mut self, v: &serde_json::Value) {
         let family = v["family"].as_str().filter(|f| !f.is_empty()).map(String::from)
             .unwrap_or_else(|| self.term_font.font.family.to_string());
-        let size = v["size"].as_f64().filter(|s| *s > 0.0).map(|s| s as f32).unwrap_or(self.term_font.size);
+        self.base_size = v["size"].as_f64().filter(|s| *s > 0.0).map(|s| s as f32).unwrap_or(self.base_size);
+        self.apply_term_font(&family);
+    }
+
+    /// Terminal text zoom (Ctrl+= / Ctrl+- / Ctrl+0): `by` points, 0 = back to the daemon's size. Only the text;
+    /// the window's own chrome keeps its size.
+    pub fn zoom_terminal(&mut self, by: f32) {
+        self.zoom = if by == 0.0 { 0.0 } else { (self.zoom + by).clamp(-5.0, 20.0) };
+        let family = self.term_font.font.family.to_string();
+        self.apply_term_font(&family);
+    }
+
+    fn apply_term_font(&mut self, family: &str) {
+        let size = (self.base_size + self.zoom).clamp(8.0, 40.0);
         if family != self.term_font.font.family.as_ref() || size != self.term_font.size {
-            self.term_font = TermFont::new(&family, size);
+            self.term_font = TermFont::new(family, size);
             self.sizes.lock().unwrap().clear();
         }
     }
@@ -233,6 +272,7 @@ impl DroverApp {
         self.mark_switch();
         self.view = View::Terminals;
         self.want_term_focus = true;
+        self.settled.remove(&id); // showing a settled tab brings it back
         self.tab = Some(id);
         self.keep_selection_valid();
         cx.notify();
@@ -252,6 +292,7 @@ impl DroverApp {
 
 impl Render for DroverApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.window_active = window.is_window_active();
         self.code_family = crate::terminal_paint::resolved(&self.term_font, window).font.family;
         // Terminals shown, or a question open: keys belong to the app, not to a view's field (e.g. after a tab
         // click left a view, or a close was asked from the sidebar while a field had focus).
@@ -289,8 +330,8 @@ impl Render for DroverApp {
             .flex()
             .flex_col()
             .size_full()
-            .bg(rgb(theme::CANVAS))
-            .text_color(rgb(theme::FG))
+            .bg(rgb(theme::canvas()))
+            .text_color(rgb(theme::fg()))
             .font_family(theme::UI_FONT)
             .text_size(gpui::px(13.))
             // Resizing (drag.rs): the whole window follows the mouse until the button is released.
@@ -303,6 +344,7 @@ impl Render for DroverApp {
             .child(div().flex().flex_row().flex_1().min_h_0()
                 .when(self.sidebar_open, |d| d.child(sidebar::sidebar(self, cx))).child(main))
             .child(topbar::status_bar(self, cx))
+            .children(crate::toasts::overlay(self, cx))
             .children(overlay)
     }
 }

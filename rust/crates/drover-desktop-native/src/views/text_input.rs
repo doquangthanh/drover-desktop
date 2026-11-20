@@ -9,7 +9,7 @@ use gpui::{
     SharedString, UTF16Selection, Window, canvas, div, prelude::*, px, rgb,
 };
 
-use crate::theme::{self, ACCENT, DIM, FG};
+use crate::theme::{self, accent, dim, fg};
 
 pub enum InputEvent {
     Changed,
@@ -202,17 +202,17 @@ impl Render for TextInput {
         let focused = self.focus.is_focused(window);
         let (entity, focus) = (cx.entity(), self.focus.clone());
         let empty = self.text.is_empty() && self.marked.is_none();
-        let caret = div().w(px(1.5)).h(px(15.)).flex_none().bg(rgb(FG));
+        let caret = div().w(px(1.5)).h(px(15.)).flex_none().bg(rgb(fg()));
         div().relative().h(px(28.)).px(px(9.)).flex().items_center().overflow_hidden().rounded(px(7.)).border_1()
-            .border_color(if focused { theme::tint(ACCENT, 0.7) } else { theme::border2() }).bg(theme::ink(0.03))
-            .text_size(px(12.5)).text_color(rgb(FG)).cursor_text()
+            .border_color(if focused { theme::tint(accent(), 0.7) } else { theme::border2() }).bg(theme::ink(0.03))
+            .text_size(px(12.5)).text_color(rgb(fg())).cursor_text()
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| { window.focus(&this.focus); cx.notify(); }))
             .child(canvas(|_, _, _| {}, move |bounds, _, window, cx| {
                 window.handle_input(&focus, ElementInputHandler::new(bounds, entity), cx);
             }).absolute().top_0().left_0().size_full())
-            .when(empty && !focused, |d| d.child(div().text_color(rgb(DIM)).child(self.placeholder.clone())))
+            .when(empty && !focused, |d| d.child(div().text_color(rgb(dim())).child(self.placeholder.clone())))
             .when(!empty || focused, |d| {
                 d.child(div().flex_none().whitespace_nowrap().child(self.text[..self.cursor].to_string()))
                     .children(self.marked.clone().map(|m| div().flex_none().underline().child(m)))

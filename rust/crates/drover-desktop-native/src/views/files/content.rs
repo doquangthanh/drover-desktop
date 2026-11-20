@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gpui::{ClipboardItem, Context, Div, MouseButton, SharedString, div, prelude::*, px, rgb, uniform_list};
 
-use crate::theme::{self, ACCENT, DIM, FG};
+use crate::theme::{self, accent, dim, fg};
 use crate::views::changes::diff_view;
 use crate::views::ui::{self, Kind};
 use crate::workspace_app::DroverApp;
@@ -16,8 +16,8 @@ pub fn text_view(lines: Arc<Vec<String>>, family: SharedString) -> Div {
     let list = uniform_list("files-text", lines.len(), move |range, _, _| {
         range.map(|i| {
             div().h(px(20.)).flex().items_center().whitespace_nowrap().overflow_hidden().font_family(family.clone())
-                .text_size(px(12.5)).text_color(rgb(FG))
-                .child(div().w(px(width)).flex_none().pr(px(10.)).flex().justify_end().text_color(rgb(DIM)).child((i + 1).to_string()))
+                .text_size(px(12.5)).text_color(rgb(fg()))
+                .child(div().w(px(width)).flex_none().pr(px(10.)).flex().justify_end().text_color(rgb(dim())).child((i + 1).to_string()))
                 .child(lines[i].clone())
         }).collect()
     }).size_full();
@@ -32,7 +32,7 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let show_diff = app.files.show_diff && changed;
     let family = app.code_family.clone();
     let mut head = div().h(px(42.)).flex_none().flex().items_center().gap(px(6.)).px(px(12.)).border_b_1().border_color(theme::border())
-        .child(div().flex_1().min_w_0().truncate().font_family(family.clone()).text_color(rgb(ACCENT)).child(file.clone()));
+        .child(div().flex_1().min_w_0().truncate().font_family(family.clone()).text_color(rgb(accent())).child(file.clone()));
     if changed {
         for (label, diff) in [("File", false), ("Diff", true)] {
             head = head.child(ui::tab(label, show_diff == diff).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {

@@ -4,7 +4,7 @@
 use gpui::{Context, Div, Entity, Focusable, FontWeight, KeyDownEvent, MouseButton, Window, div, prelude::*, px, rgb, rgba};
 use serde_json::json;
 
-use crate::theme::{self, ACCENT, DIM, FG, MUTED, UI_FONT};
+use crate::theme::{self, accent, dim, fg, muted, UI_FONT};
 use crate::views::View;
 use crate::views::text_input::{InputEvent, TextInput};
 use crate::widgets::{kind_icon, state_mark};
@@ -21,10 +21,10 @@ pub enum Kind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cmd {
     NewTab, CloseTab, NextTab, PrevTab, SplitRight, SplitDown, ClosePane, Zoom, Sidebar,
-    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Jump, Rename, Find,
+    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Jump, Rename, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll,
 }
 
-const COMMANDS: [(&str, &str, Cmd); 21] = [
+const COMMANDS: [(&str, &str, Cmd); 27] = [
     ("New tab", "Ctrl+N", Cmd::NewTab), ("Close tab", "Ctrl+W", Cmd::CloseTab), ("Next tab", "Ctrl+Tab", Cmd::NextTab),
     ("Previous tab", "Ctrl+Shift+Tab", Cmd::PrevTab), ("Split right", "Ctrl+\\", Cmd::SplitRight),
     ("Split down", "Ctrl+K Ctrl+\\", Cmd::SplitDown), ("Close pane", "Ctrl+K W", Cmd::ClosePane), ("Zoom pane", "Ctrl+K Ctrl+M", Cmd::Zoom),
@@ -32,7 +32,10 @@ const COMMANDS: [(&str, &str, Cmd); 21] = [
     ("Changes panel", "Ctrl+Shift+G", Cmd::Changes), ("Inbox", "Ctrl+Shift+I", Cmd::Inbox), ("Machines", "Ctrl+Shift+M", Cmd::Machines),
     ("Settings", "Ctrl+,", Cmd::Settings), ("Next agent that needs you", "F8", Cmd::NextBlocked), ("Next finished agent", "Shift+F8", Cmd::NextDone),
     ("Keyboard shortcuts", "Ctrl+K Ctrl+S", Cmd::Shortcuts), ("Jump to a terminal", "Ctrl+P", Cmd::Jump), ("Rename agent", "F2", Cmd::Rename),
-    ("Find in terminal", "Ctrl+F", Cmd::Find),
+    ("Find in terminal", "Ctrl+F", Cmd::Find), ("Put this tab away (settle)", "", Cmd::SettleTab),
+    ("Bring back settled tabs", "", Cmd::UnsettleTabs), ("Terminal text bigger", "Ctrl+=", Cmd::ZoomIn),
+    ("Terminal text smaller", "Ctrl+-", Cmd::ZoomOut), ("Terminal text normal size", "Ctrl+0", Cmd::ZoomReset),
+    ("Select all in terminal", "", Cmd::SelectAll),
 ];
 
 pub struct Picker {
@@ -165,6 +168,12 @@ impl DroverApp {
             Cmd::Jump => self.open_picker(Kind::Jump, window, cx),
             Cmd::Rename => self.open_picker(Kind::Rename, window, cx),
             Cmd::Find => self.open_picker(Kind::Find, window, cx),
+            Cmd::SettleTab => self.settle_current_tab(cx),
+            Cmd::UnsettleTabs => self.unsettle_all(cx),
+            Cmd::ZoomIn => self.zoom_terminal(1.0),
+            Cmd::ZoomOut => self.zoom_terminal(-1.0),
+            Cmd::ZoomReset => self.zoom_terminal(0.0),
+            Cmd::SelectAll => self.select_all(cx),
         }
         cx.notify();
     }
@@ -196,19 +205,19 @@ pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
         list = list.child(div().h(px(32.)).flex_none().flex().items_center().gap(px(10.)).px(px(10.)).rounded(px(7.))
             .when(on, |d| d.bg(theme::selected())).hover(|d| d.bg(theme::hover()))
             .children(lead)
-            .child(div().flex_1().min_w_0().truncate().text_color(rgb(FG)).child(label))
-            .child(div().flex_none().text_size(px(11.5)).text_color(rgb(if matches!(row, Row::Cmd(_)) { ACCENT } else { DIM })).child(detail))
+            .child(div().flex_1().min_w_0().truncate().text_color(rgb(fg())).child(label))
+            .child(div().flex_none().text_size(px(11.5)).text_color(rgb(if matches!(row, Row::Cmd(_)) { accent() } else { dim() })).child(detail))
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| {
                 if let Some(p) = app.picker.as_mut() { p.selected = i; }
                 app.picker_enter(window, cx);
                 cx.stop_propagation();
             })));
     }
-    let card = div().w(px(600.)).mt(px(90.)).p(px(12.)).flex().flex_col().gap(px(8.)).rounded(px(12.)).bg(rgb(0x1d1f23))
+    let card = div().w(px(600.)).mt(px(90.)).p(px(12.)).flex().flex_col().gap(px(8.)).rounded(px(12.)).bg(rgb(crate::theme::card()))
         .border_1().border_color(theme::border2()).shadow_lg().font_family(UI_FONT)
-        .child(div().px(px(4.)).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(rgb(MUTED)).child(title))
+        .child(div().px(px(4.)).text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(rgb(muted())).child(title))
         .child(p.input.clone())
-        .children(p.note.clone().map(|n| div().px(px(4.)).text_size(px(12.)).text_color(rgb(DIM)).child(n)))
+        .children(p.note.clone().map(|n| div().px(px(4.)).text_size(px(12.)).text_color(rgb(dim())).child(n)))
         .child(list)
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation());
     Some(div().absolute().top_0().left_0().size_full().flex().flex_col().items_center().bg(rgba(0x00000059))
