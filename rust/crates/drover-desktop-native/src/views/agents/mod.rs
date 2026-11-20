@@ -3,6 +3,7 @@
 //! Messages come from `messages.list`, fetched again when the tree, a state in it, or the "messages" tick changes.
 
 mod activity;
+mod flow_logic;
 mod inspector;
 mod list;
 

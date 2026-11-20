@@ -7,15 +7,14 @@ use serde_json::{Value, json};
 
 use crate::actions::{Confirm, Then, open_in_browser};
 use crate::theme::{self, dim, done, error, muted};
-use crate::views::files::text_view;
 use crate::views::ui::{self, Kind};
 use crate::workspace_app::DroverApp;
 
 /// Label, file, section marker (shown as a hint).
-const SECTIONS: [(&str, &str, &str); 9] = [
+const SECTIONS: [(&str, &str, &str); 10] = [
     ("General", "settings.toml", ""), ("Appearance", "settings.toml", "theme"), ("Notifications", "settings.toml", "[notify]"), ("Keyboard", "keys.toml", ""),
     ("Machines", "machines.toml", ""), ("Agent policy", "settings.toml", "[orchestration]"),
-    ("Notes for agents", "AGENTS.md", ""), ("Updates", "", ""), ("Server", "", ""),
+    ("Notes for agents", "AGENTS.md", ""), ("Updates", "", ""), ("Server", "", ""), ("Rules tester", "", ""),
 ];
 
 #[derive(Default)]
@@ -26,10 +25,59 @@ pub struct SettingsState {
     pub update: Option<Result<Value, String>>,
     /// `server.info`, loaded when the Server section is open.
     pub server: Option<Result<Value, String>>,
+    /// The file in the editor and the text it was loaded with (the editor is "modified" when it differs).
+    pub editing: Option<(String, String)>,
+    /// "Saved …" after a save, cleared when another file opens.
+    pub note: Option<String>,
     loading: bool,
 }
 
-pub fn refresh(app: &mut DroverApp) {
+/// Text of config file `name` from `settings.files`.
+fn file_text(data: &Value, name: &str) -> String {
+    data["files"].as_array().and_then(|f| f.iter().find(|f| f["name"] == name)).and_then(|f| f["text"].as_str()).unwrap_or("").to_string()
+}
+
+/// Put the open file into the editor when another file was opened, or when it was reloaded and has no unsaved edits.
+fn sync_editor(app: &mut DroverApp, cx: &mut Context<DroverApp>) {
+    let (_, name, _) = SECTIONS[app.settings.section];
+    let Some(Ok(data)) = &app.settings.files else { return };
+    if name.is_empty() { return }
+    let text = file_text(data, name);
+    let current = app.settings_editor.read(cx).text.clone();
+    let reload = match &app.settings.editing {
+        Some((n, base)) if n == name => *base != text && current == *base,
+        _ => true,
+    };
+    if reload {
+        if app.settings.editing.as_ref().is_none_or(|(n, _)| n != name) { app.settings.note = None; }
+        app.settings_editor.update(cx, |e, cx| e.set_text(&text, cx));
+        app.settings.editing = Some((name.to_string(), text));
+    }
+}
+
+impl DroverApp {
+    /// Save the editor to its file (`settings.write`, validated by the daemon); the daemon reloads the file itself.
+    pub fn save_setting_file(&mut self, cx: &mut Context<Self>) {
+        let Some((name, _)) = self.settings.editing.clone() else { return };
+        let text = self.settings_editor.read(cx).text.clone();
+        self.settings.note = Some("Saving…".into());
+        let saved = text.clone();
+        self.rpc_reply("settings.write", json!({"name": name, "text": text}), move |app, r| match r {
+            Ok(_) => {
+                app.settings.note = Some("✓ Saved. Drover reloads it within 2 seconds.".into());
+                app.settings.editing = app.settings.editing.take().map(|(n, _)| (n, saved));
+                app.settings.files = None;
+            }
+            Err(e) => { app.settings.note = None; app.toasts.error(e); }
+        });
+        cx.notify();
+    }
+}
+
+pub fn refresh(app: &mut DroverApp, cx: &mut Context<DroverApp>) {
+    let family = app.code_family.clone();
+    app.settings_editor.update(cx, |e, _| e.family = Some(family));
+    sync_editor(app, cx);
     if app.settings.files.is_none() && !app.settings.loading {
         app.settings.loading = true;
         app.rpc_reply("settings.files", json!({}), |app, r| {
@@ -44,6 +92,12 @@ pub fn refresh(app: &mut DroverApp) {
     if SECTIONS[app.settings.section].0 == "Server" {
         crate::views::settings_server::refresh(app);
     }
+    if SECTIONS[app.settings.section].0 == "Appearance" {
+        crate::views::settings_look::refresh(app);
+    }
+    if SECTIONS[app.settings.section].0 == "Rules tester" {
+        crate::views::settings_rules::refresh(app);
+    }
 }
 
 impl DroverApp {
@@ -57,22 +111,27 @@ impl DroverApp {
 fn file_section(app: &DroverApp, data: &Value, name: &str, marker: &str, cx: &mut Context<DroverApp>) -> Div {
     let file = data["files"].as_array().and_then(|f| f.iter().find(|f| f["name"] == name)).cloned().unwrap_or(json!({}));
     let path = file["path"].as_str().map(String::from).unwrap_or_else(|| format!("{}/{name}", data["dir"].as_str().unwrap_or("")));
-    let text = file["text"].as_str().unwrap_or("").to_string();
     let errors: Vec<String> = data["errors"].as_array().into_iter().flatten().filter_map(|e| e.as_str())
         .filter(|e| e.starts_with(name)).map(String::from).collect();
     let mut head = div().h(px(42.)).flex_none().flex().items_center().gap(px(8.)).px(px(12.)).border_b_1().border_color(theme::border())
         .child(div().flex_1().min_w_0().truncate().font_family(app.code_family.clone()).child(name.to_string()))
         .when(!marker.is_empty(), |d| d.child(div().text_size(px(12.)).text_color(rgb(dim())).child(format!("see {marker}"))))
         .when(file["exists"] == false, |d| d.child(div().text_size(px(12.)).text_color(rgb(dim())).child("new file")));
+    let modified = app.settings.editing.as_ref().is_some_and(|(n, base)| n == name && *base != app.settings_editor.read(cx).text);
     head = head
+        .when(modified, |d| d.child(div().text_size(px(12.)).text_color(rgb(dim())).child("modified")))
+        .when_some(app.settings.note.clone().filter(|_| !modified), |d, n| d.child(div().text_size(px(12.)).text_color(rgb(done())).child(n)))
         .child(ui::button("Open in editor", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |_, _, _, _| open_in_browser(&path))))
-        .child(ui::button("Edit in browser", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, _| app.open_web("settings"))));
-    let lines: Vec<String> = text.split('\n').map(String::from).collect();
+        .child(ui::button("Revert", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| {
+            let base = app.settings.editing.as_ref().map(|(_, b)| b.clone()).unwrap_or_default();
+            app.settings_editor.update(cx, |e, cx| e.set_text(&base, cx));
+        })))
+        .child(ui::button("Save", Kind::Primary).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.save_setting_file(cx))));
     div().flex().flex_col().flex_1().min_h_0().min_w_0()
         .when(marker == "[notify]", |d| d.child(crate::views::settings_alerts::controls(app, cx)))
         .child(head)
         .children(errors.into_iter().map(|e| div().px(px(12.)).py(px(6.)).text_size(px(12.)).text_color(rgb(error())).child(e)))
-        .child(text_view(std::sync::Arc::new(lines), app.code_family.clone()))
+        .child(div().flex().flex_col().flex_1().min_h_0().p(px(10.)).child(app.settings_editor.clone()))
 }
 
 fn updates(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
@@ -130,6 +189,6 @@ pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
                 .child(ui::button("Open folder", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |_, _, _, _| open_in_browser(&open_dir))))
                 .child(ui::button("Reload", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.settings.files = None; app.settings.server = None; cx.notify(); })))));
     let (label, file, marker) = SECTIONS[app.settings.section];
-    let right = if label == "Updates" { updates(app, cx) } else if label == "Server" { crate::views::settings_server::panel(app, cx) } else if label == "Appearance" { crate::views::settings_look::panel(app, cx) } else { file_section(app, &data, file, marker, cx) };
+    let right = if label == "Updates" { updates(app, cx) } else if label == "Rules tester" { crate::views::settings_rules::panel(app, cx) } else if label == "Server" { crate::views::settings_server::panel(app, cx) } else if label == "Appearance" { crate::views::settings_look::panel(app, cx) } else { file_section(app, &data, file, marker, cx) };
     ui::split(220., left, right)
 }
