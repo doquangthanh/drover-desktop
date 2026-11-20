@@ -608,9 +608,25 @@ pub trait ClientHandler<C: Client> {
 
 /// drover patch: input methods (ibus + Unikey) can send compound text whose high bytes are ISO 8859-1, which
 /// `compound_text_to_utf8` rejects; the upstream code then panicked and closed the app. Fall back to Latin-1.
+/// Also, mixed text ("vi" + "ệ" + "t") comes back from `compound_text_to_utf8` with the ISO 2022 "UTF-8 on/off"
+/// markers (ESC % G, ESC % @) still inside, which showed up as "vi%Gệ%@t": drop them.
 fn decode_text(bytes: &[u8]) -> String {
-    match xim_ctext::compound_text_to_utf8(bytes) {
+    let text = match xim_ctext::compound_text_to_utf8(bytes) {
         Ok(text) => text,
         Err(_) => bytes.iter().map(|&b| b as char).filter(|c| !c.is_control() || *c == '\n').collect(),
+    };
+    text.replace("\x1b%G", "").replace("\x1b%@", "")
+}
+
+#[cfg(test)]
+mod decode_text_tests {
+    use super::decode_text;
+
+    #[test]
+    fn utf8_segments_of_compound_text_keep_their_letters_only() {
+        // ibus sends non-Latin-1 letters as ESC % G <utf-8> ESC % @ (ISO 2022 "UTF-8 on" / "UTF-8 off").
+        assert_eq!(decode_text(b"vi\x1b%G\xe1\xbb\x87\x1b%@t"), "việt");
+        assert_eq!(decode_text(b"\x1b%G\xc4\x91\x1b%@"), "đ");
+        assert_eq!(decode_text(b"abc"), "abc");
     }
 }
