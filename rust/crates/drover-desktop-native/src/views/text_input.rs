@@ -1,12 +1,14 @@
 //! A one-line text field (`.input` in the web UI): typing and Vietnamese Telex through the input method, the keys
 //! a field needs (arrows, Home/End, Backspace/Delete, Enter, Escape, Ctrl+V), drawn with the app theme.
-//! Emits `Changed` on every edit, `Submit` on Enter and `Cancel` on Escape.
+//! Emits `Changed` on every edit, `Submit` on Enter and `Cancel` on Escape. `new_multiline` makes a small text editor
+//! (settings files): Enter inserts a line, Up / Down / Home / End work by line, Tab inserts two spaces, Ctrl+S emits
+//! `Submit`. No selection, no undo and no mouse placement of the caret yet.
 
 use std::ops::Range;
 
 use gpui::{
     App, Bounds, Context, ElementInputHandler, EventEmitter, FocusHandle, Focusable, KeyDownEvent, MouseButton, Pixels,
-    SharedString, UTF16Selection, Window, canvas, div, prelude::*, px, rgb,
+    ScrollHandle, SharedString, UTF16Selection, Window, canvas, div, prelude::*, px, rgb,
 };
 
 use crate::theme::{self, accent, dim, fg};
@@ -28,7 +30,32 @@ pub struct TextInput {
     after_commit: Vec<String>,
     focus: FocusHandle,
     placeholder: SharedString,
+    multiline: bool,
+    /// Font of a multi-line editor (the code font); the app sets it every frame.
+    pub family: Option<SharedString>,
+    scroll: ScrollHandle,
+    /// Scroll the caret's line into view on the next paint.
+    follow: bool,
 }
+
+/// Byte offsets of the start and end (before the `\n`) of the line holding `at`.
+fn line_bounds(text: &str, at: usize) -> (usize, usize) {
+    let start = text[..at].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let end = text[at..].find('\n').map(|i| at + i).unwrap_or(text.len());
+    (start, end)
+}
+
+/// Cursor after Up (`down` false) or Down: same column (in chars) on the neighbouring line, or the line's end when it is shorter.
+fn vertical(text: &str, cursor: usize, down: bool) -> usize {
+    let (start, end) = line_bounds(text, cursor);
+    let col = text[start..cursor].chars().count();
+    let target = if down { if end >= text.len() { return cursor } else { end + 1 } } else { if start == 0 { return cursor } else { line_bounds(text, start - 1).0 } };
+    let (ts, te) = line_bounds(text, target);
+    text[ts..te].char_indices().nth(col).map(|(i, _)| ts + i).unwrap_or(te)
+}
+
+/// Height of one line of a multi-line editor.
+const LINE_H: f32 = 19.;
 
 impl EventEmitter<InputEvent> for TextInput {}
 
@@ -40,7 +67,21 @@ impl Focusable for TextInput {
 
 impl TextInput {
     pub fn new(placeholder: &str, cx: &mut Context<Self>) -> Self {
-        TextInput { text: String::new(), cursor: 0, marked: None, after_commit: vec![], focus: cx.focus_handle(), placeholder: placeholder.to_string().into() }
+        TextInput { text: String::new(), cursor: 0, marked: None, after_commit: vec![], focus: cx.focus_handle(), placeholder: placeholder.to_string().into(),
+                    multiline: false, family: None, scroll: ScrollHandle::new(), follow: false }
+    }
+
+    pub fn new_multiline(cx: &mut Context<Self>) -> Self {
+        TextInput { multiline: true, ..Self::new("", cx) }
+    }
+
+    fn line_bounds(&self, at: usize) -> (usize, usize) {
+        line_bounds(&self.text, at)
+    }
+
+    /// Cursor to the same column on the line above (`down` false) or below.
+    fn move_line(&mut self, down: bool) {
+        self.cursor = vertical(&self.text, self.cursor, down);
     }
 
     #[allow(dead_code)] // used by the views' forms (phase 01+)
@@ -62,7 +103,7 @@ impl TextInput {
     }
 
     fn edit(&mut self, range: Range<usize>, with: &str, cx: &mut Context<Self>) {
-        let with = with.replace(['\r', '\n', '\t'], " "); // one line: a pasted newline would submit nothing useful
+        let with = if self.multiline { with.replace('\r', "").replace('\t', "  ") } else { with.replace(['\r', '\n', '\t'], " ") }; // one line: a pasted newline would submit nothing useful
         self.text.replace_range(range.clone(), &with);
         self.cursor = range.start + with.len();
         cx.emit(InputEvent::Changed);
@@ -81,13 +122,14 @@ impl TextInput {
         crate::actions::trace(&format!("input key {:?} char {:?}", ev.keystroke.key, ev.keystroke.key_char));
         let m = &ev.keystroke.modifiers;
         let key = ev.keystroke.key.as_str();
-        let edit_key = matches!(key, "backspace" | "delete" | "left" | "right" | "home" | "end" | "enter");
+        let edit_key = matches!(key, "backspace" | "delete" | "left" | "right" | "home" | "end" | "enter" | "up" | "down" | "tab");
         if self.marked.is_some() && edit_key && !m.control && !m.alt {
             self.after_commit.push(key.to_string());
             cx.stop_propagation();
             return;
         }
         if self.apply_key(key, m.control && !m.alt, cx) {
+            self.follow = true;
             cx.stop_propagation();
             cx.notify();
         }
@@ -101,8 +143,12 @@ impl TextInput {
             "delete" if c < self.text.len() => self.edit(c..self.next(c), "", cx),
             "left" => self.cursor = self.prev(c),
             "right" => self.cursor = self.next(c),
-            "home" => self.cursor = 0,
-            "end" => self.cursor = self.text.len(),
+            "home" => self.cursor = if self.multiline { self.line_bounds(c).0 } else { 0 },
+            "end" => self.cursor = if self.multiline { self.line_bounds(c).1 } else { self.text.len() },
+            "up" | "down" if self.multiline => self.move_line(key == "down"),
+            "tab" if self.multiline => self.edit(c..c, "  ", cx),
+            "enter" if self.multiline => self.edit(c..c, "\n", cx),
+            "s" if ctrl && self.multiline => cx.emit(InputEvent::Submit),
             "enter" => cx.emit(InputEvent::Submit),
             "escape" => {
                 self.after_commit.clear();
@@ -203,6 +249,9 @@ impl Render for TextInput {
         let (entity, focus) = (cx.entity(), self.focus.clone());
         let empty = self.text.is_empty() && self.marked.is_none();
         let caret = div().w(px(1.5)).h(px(15.)).flex_none().bg(rgb(fg()));
+        if self.multiline {
+            return self.render_editor(focused, entity, focus, caret, cx).into_any_element();
+        }
         div().relative().h(px(28.)).px(px(9.)).flex().items_center().overflow_hidden().rounded(px(7.)).border_1()
             .border_color(if focused { theme::tint(accent(), 0.7) } else { theme::border2() }).bg(theme::ink(0.03))
             .text_size(px(12.5)).text_color(rgb(fg())).cursor_text()
@@ -219,5 +268,73 @@ impl Render for TextInput {
                     .when(focused, |d| d.child(caret))
                     .child(div().flex_none().whitespace_nowrap().child(self.text[self.cursor..].to_string()))
             })
+            .into_any_element()
+    }
+}
+
+impl TextInput {
+    /// The multi-line editor: one row per line (so the scroll handle can bring the caret's row into view).
+    fn render_editor(&mut self, focused: bool, entity: gpui::Entity<TextInput>, focus: FocusHandle, caret: gpui::Div, cx: &mut Context<Self>) -> impl IntoElement {
+        let cur_line = self.text[..self.cursor].matches('\n').count();
+        if std::mem::take(&mut self.follow) {
+            self.scroll.scroll_to_item(cur_line);
+        }
+        let (ls, le) = self.line_bounds(self.cursor);
+        let mut rows = Vec::new();
+        for (i, line) in self.text.split('\n').enumerate() {
+            let row = div().min_h(px(LINE_H)).flex().items_center();
+            rows.push(if i == cur_line && (focused || self.marked.is_some()) {
+                let (a, b) = (&self.text[ls..self.cursor], &self.text[self.cursor..le]);
+                row.child(div().flex_none().whitespace_nowrap().child(a.to_string()))
+                    .children(self.marked.clone().map(|m| div().flex_none().underline().child(m)))
+                    .child(div().w(px(1.5)).h(px(15.)).flex_none().bg(rgb(fg())))
+                    .child(div().whitespace_nowrap().child(b.to_string()))
+            } else {
+                row.child(div().whitespace_nowrap().child(line.to_string()))
+            });
+        }
+        let _ = caret;
+        div().relative().flex_1().min_h_0().min_w_0().overflow_hidden().rounded(px(7.)).border_1()
+            .border_color(if focused { theme::tint(accent(), 0.7) } else { theme::border2() }).bg(theme::ink(0.03))
+            .text_size(px(12.5)).text_color(rgb(fg())).cursor_text()
+            .when_some(self.family.clone(), |d, f| d.font_family(f))
+            .track_focus(&self.focus)
+            .on_key_down(cx.listener(Self::on_key))
+            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| { window.focus(&this.focus); cx.notify(); }))
+            .child(canvas(|_, _, _| {}, move |bounds, _, window, cx| {
+                window.handle_input(&focus, ElementInputHandler::new(bounds, entity), cx);
+            }).absolute().top_0().left_0().size_full())
+            .child(div().id("editor-lines").size_full().overflow_y_scroll().track_scroll(&self.scroll).py(px(6.)).px(px(9.)).children(rows))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn line_bounds_cover_first_middle_and_last_lines() {
+        let t = "ab\ncde\n\nf";
+        assert_eq!(line_bounds(t, 1), (0, 2));
+        assert_eq!(line_bounds(t, 5), (3, 6));
+        assert_eq!(line_bounds(t, 7), (7, 7)); // the empty line
+        assert_eq!(line_bounds(t, 9), (8, 9));
+    }
+
+    #[test]
+    fn up_and_down_keep_the_column_or_stop_at_the_line_end() {
+        let t = "abcd\nxy\nlmnop"; // a0 b1 c2 d3 \n4 x5 y6 \n7 l8 m9 n10 o11 p12
+        assert_eq!(vertical(t, 3, true), 7); // "abc|d": column 3 of "xy" is past its end: the end of that line
+        assert_eq!(vertical(t, 7, true), 10); // "xy|": column 2 of "lmnop"
+        assert_eq!(vertical(t, 11, false), 7); // column 3 on "xy" again: its end
+        assert_eq!(vertical(t, 2, false), 2); // already on the first line: stays
+        assert_eq!(vertical(t, 13, true), 13); // already on the last line: stays
+    }
+
+    #[test]
+    fn columns_count_chars_not_bytes() {
+        let t = "đỗ\nabc"; // đ and ỗ are 2 and 3 bytes
+        let cursor = "đỗ".len();
+        assert_eq!(vertical(t, cursor, true), "đỗ\nab".len());
     }
 }

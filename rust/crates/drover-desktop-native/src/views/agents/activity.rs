@@ -1,14 +1,15 @@
 //! Agents view, the tree's activity: Flow (one lane per agent, one arrow per message), Messages (newest first)
-//! and Policy (`[orchestration]`). Port of `agent-flow-board.tsx` and the tabs of `tree-view.tsx`; the Flow board
-//! has no sub-agent lanes and no activity bars yet.
+//! and Policy (`[orchestration]`). Port of `agent-flow-board.tsx` and the tabs of `tree-view.tsx`. The Flow board
+//! has a lane per Claude Code sub-agent and a bar per agent showing when it was active (`flow_logic.rs`).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use drover_proto::agent_tree::{self, AgentMessage};
 use drover_proto::wire::Pane;
 use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, relative, rgb};
 
 use super::Tab;
+use super::flow_logic::{self, SUB_KIND, SubLane, state_text, with_sub_lanes};
 use super::inspector::{label, state_color, state_label};
 use crate::theme::{self, accent, blocked, dim, done, error, fg, muted, working, tint};
 use crate::views::ui;
@@ -26,20 +27,51 @@ fn kind_color(kind: &str) -> u32 {
     }
 }
 
-fn flow(app: &DroverApp, messages: &[AgentMessage], lanes: &[String], focus: Option<&HashSet<String>>) -> Div {
+const ROW: f32 = 40.;
+/// Where the arrow line sits inside a row: the middle of the dot, so bars start and end on it.
+const LINE_Y: f32 = 21.;
+const GUTTER: f32 = 56.;
+const LEGEND: [(&str, &str); 7] = [("spawn", "started · dr run"), ("send", "sends · dr send"), ("done", "finished"), ("wait", "waits · dr wait"),
+    ("blocked", "needs you"), ("denied", "blocked by policy"), ("sub-start", "delegates · sub-agent")];
+
+fn flow(app: &DroverApp, messages: &[AgentMessage], lanes: &[String], subs: &[SubLane], focus: Option<&HashSet<String>>) -> Div {
     let n = lanes.len().max(1) as f32;
     let lane = |id: &Option<String>| lanes.iter().position(|l| Some(l) == id.as_ref()).unwrap_or(0);
     let center = |i: usize| (i as f32 + 0.5) / n;
-    let mut heads = div().flex().flex_none().pl(px(56.)).border_b_1().border_color(theme::border());
-    for id in lanes {
-        let p = app.store.pane(id);
-        heads = heads.child(div().flex_1().min_w_0().flex().flex_col().items_center().gap(px(3.)).py(px(8.))
-            .child(match p { Some(p) => kind_icon(&p.kind), None => div().size(px(14.)) })
-            .child(div().max_w_full().truncate().text_size(px(12.)).child(if p.is_some() { label(p) } else { "You".into() }))
-            .child(div().text_size(px(10.5)).text_color(rgb(p.map(|p| state_color(&p.state)).unwrap_or(dim())))
-                .child(p.map(state_label).unwrap_or_default())));
+    let mut states: HashMap<String, String> = app.store.panes.iter().map(|p| (p.id.clone(), p.state.clone())).collect();
+    states.extend(subs.iter().map(|s| (s.id.clone(), s.state.clone())));
+
+    let mut legend = div().flex().flex_none().flex_wrap().gap(px(12.)).px(px(12.)).py(px(6.)).text_size(px(11.)).text_color(rgb(dim()));
+    for (kind, text) in LEGEND {
+        legend = legend.child(div().flex().items_center().gap(px(5.)).child(div().size(px(7.)).rounded_full().bg(rgb(kind_color(kind)))).child(text));
     }
-    let mut rows = div().id("agents-flow").flex_1().min_h_0().overflow_y_scroll().flex().flex_col();
+    legend = legend.child(div().flex().items_center().gap(px(5.)).child(div().w(px(4.)).h(px(10.)).rounded(px(2.)).bg(rgb(dim()))).child("agent active"));
+
+    let mut heads = div().flex().flex_none().pl(px(GUTTER)).border_b_1().border_color(theme::border());
+    for id in lanes {
+        let (icon, name, state) = match (app.store.pane(id), subs.iter().find(|s| &s.id == id)) {
+            (Some(p), _) => (kind_icon(&p.kind), label(Some(p)), (state_label(p), state_color(&p.state))),
+            (None, Some(s)) => (kind_icon(SUB_KIND), s.name.clone(), (format!("sub-agent · {}", state_text(&s.state)), state_color(&s.state))),
+            _ => (div().size(px(14.)), "You".into(), (String::new(), dim())),
+        };
+        heads = heads.child(div().flex_1().min_w_0().flex().flex_col().items_center().gap(px(3.)).py(px(8.)).child(icon)
+            .child(div().max_w_full().truncate().text_size(px(12.)).child(name))
+            .child(div().max_w_full().truncate().text_size(px(10.5)).text_color(rgb(state.1)).child(state.0)));
+    }
+
+    // Behind the rows: a thin life line per lane and a bar where the agent was active.
+    let mut overlay = div().absolute().top_0().bottom_0().left(px(GUTTER)).right_0();
+    for i in 0..lanes.len() {
+        overlay = overlay.child(div().absolute().top_0().bottom_0().w(px(1.)).left(relative(center(i))).bg(theme::border()));
+    }
+    for b in flow_logic::activity_bars(messages, lanes, &states) {
+        let h = ((b.end_row - b.start_row) as f32 * ROW).max(8.) + if b.live { 14. } else { 0. };
+        let color = state_color(&b.state);
+        overlay = overlay.child(div().absolute().top(px(b.start_row as f32 * ROW + LINE_Y)).h(px(h)).w(px(4.)).ml(px(-2.)).rounded(px(2.))
+            .left(relative(center(b.lane))).bg(tint(color, if b.live { 0.9 } else { 0.45 })));
+    }
+
+    let mut rows = div().relative().flex().flex_col().child(overlay);
     for m in messages {
         let (a, b) = (lane(&m.source), lane(&m.target));
         let (lo, hi) = (center(a.min(b)), center(a.max(b)));
@@ -49,18 +81,19 @@ fn flow(app: &DroverApp, messages: &[AgentMessage], lanes: &[String], focus: Opt
         let pill_text = if m.text.is_empty() { verb.clone() } else { format!("{verb} · {}", m.text) };
         let track = div().relative().flex_1().h_full()
             .when(hi > lo, |d| d.child(div().absolute().top(px(20.)).h(px(2.)).left(relative(lo)).w(relative(hi - lo)).bg(rgb(color))))
-            .child(div().absolute().top(px(16.)).size(px(10.)).rounded_full().bg(rgb(color)).left(relative(center(a))))
+            .child(div().absolute().top(px(16.)).size(px(10.)).rounded_full().bg(rgb(color)).left(relative(center(a))).ml(px(-5.)))
             .child(div().absolute().top(px(2.)).left(relative(lo)).w(relative((hi - lo).max(1. / n))).flex().justify_center()
                 .child(div().max_w_full().truncate().px(px(6.)).rounded(px(5.)).text_size(px(11.)).bg(tint(color, 0.16))
                     .text_color(rgb(color)).child(pill_text)));
-        rows = rows.child(div().h(px(40.)).flex_none().flex().when(dim, |d| d.opacity(0.35))
-            .child(div().w(px(56.)).flex_none().pl(px(10.)).pt(px(12.)).text_size(px(11.)).text_color(rgb(crate::theme::dim())).child(age(m.at)))
+        rows = rows.child(div().h(px(ROW)).flex_none().flex().when(dim, |d| d.opacity(0.35))
+            .child(div().w(px(GUTTER)).flex_none().pl(px(10.)).pt(px(12.)).text_size(px(11.)).text_color(rgb(crate::theme::dim())).child(age(m.at)))
             .child(track));
     }
     if messages.is_empty() {
         rows = rows.child(ui::note("No agent-to-agent activity yet. Agents use `dr run`, `dr wait`, `dr send`.", false));
     }
-    div().flex().flex_col().flex_1().min_h_0().child(heads).child(rows)
+    div().flex().flex_col().flex_1().min_h_0().child(legend).child(heads)
+        .child(div().flex().flex_col().flex_1().min_h_0().child(div().id("agents-flow").size_full().overflow_y_scroll().child(rows)))
 }
 
 fn messages_list(app: &DroverApp, messages: &[AgentMessage]) -> Div {
@@ -121,8 +154,10 @@ pub fn activity(app: &DroverApp, pane: &Pane, tree: &[String], cx: &mut Context<
         (None, _) => ui::note("Loading…", false),
         (Some(Err(e)), _) => ui::note(e.clone(), true),
         (Some(Ok(m)), Tab::Flow) => {
-            let lanes: Vec<String> = std::iter::once(String::new()).chain(tree.iter().cloned()).collect();
-            flow(app, m, &lanes, focus.as_ref())
+            let states: HashMap<String, String> = app.store.panes.iter().map(|p| (p.id.clone(), p.state.clone())).collect();
+            let subs: Vec<SubLane> = flow_logic::sub_lanes(m, &states).into_iter().filter(|s| tree.contains(&s.parent)).collect();
+            let lanes: Vec<String> = std::iter::once(String::new()).chain(with_sub_lanes(tree, &subs)).collect();
+            flow(app, m, &lanes, &subs, focus.as_ref())
         }
         (Some(Ok(m)), Tab::Messages) => {
             let shown: Vec<AgentMessage> = m.iter().filter(|m| focus.as_ref().is_none_or(|f| agent_tree::touches(m, f))).cloned().collect();

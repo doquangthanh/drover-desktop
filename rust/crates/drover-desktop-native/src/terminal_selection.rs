@@ -39,6 +39,7 @@ impl DroverApp {
     }
 
     pub fn select_start(&mut self, pane: &str, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.mouse_press(pane, ev.position, ev.modifiers, window, cx) { return } // the program tracks the mouse
         let Some((point, side)) = self.cell_at(pane, ev.position, window) else { return };
         let ty = match ev.click_count {
             2 => SelectionType::Semantic,
@@ -53,6 +54,7 @@ impl DroverApp {
     }
 
     pub fn select_move(&mut self, pane: &str, ev: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.mouse_motion(pane, ev.position, ev.pressed_button == Some(MouseButton::Left), ev.modifiers, window) { return }
         let Some((point, side)) = self.cell_at(pane, ev.position, window) else { return };
         if ev.pressed_button == Some(MouseButton::Left) && self.selecting.as_deref() == Some(pane) {
             if let Some(sel) = self.screens.lock().unwrap().get_mut(pane).and_then(|s| s.term_mut().selection.as_mut()) {
@@ -70,6 +72,7 @@ impl DroverApp {
 
     /// Release: copy what was selected; a plain click (nothing selected) on a link opens it.
     pub fn select_end(&mut self, pane: &str, ev: &MouseUpEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.mouse_release(pane, ev.position, ev.modifiers, window) { cx.notify(); return }
         self.selecting = None;
         if let Some(text) = self.selected_text(pane) {
             cx.write_to_clipboard(ClipboardItem::new_string(text));

@@ -61,6 +61,7 @@ pub struct DroverApp {
     pub inbox_filter: crate::views::inbox::Filter,
     pub settings: crate::views::settings::SettingsState,
     pub machines_form: crate::views::machines::MachinesForm,
+    pub rules: crate::views::settings_rules::RulesState,
     /// The font code is drawn with in the views (diffs, files): the terminal's, as `terminal_paint::resolved` picks it.
     pub code_family: gpui::SharedString,
     /// The right panel beside the terminals (Agents, Files or Changes of the focused pane), as in Herdr.
@@ -89,6 +90,16 @@ pub struct DroverApp {
     pub settled: std::collections::HashSet<String>,
     /// Terminal text zoom: the size the daemon / default gives, plus the points added with Ctrl+= / Ctrl+-.
     pub base_size: f32,
+    /// This device's own font (font_prefs.rs), what the daemon last reported, and the Settings → Appearance form.
+    pub font_own: crate::font_prefs::OwnFont,
+    /// The pane whose left button press went to the program (mouse tracking) and the cell it was last reported at.
+    pub mouse_reporting: Option<String>,
+    /// The cell the mouse was last reported at, so a motion inside one cell is not sent again.
+    pub mouse_last: Option<(String, usize, usize)>,
+    pub daemon_font: (String, f32),
+    pub font_form: crate::views::settings_look::FontForm,
+    /// The multi-line editor of Settings (one file at a time).
+    pub settings_editor: Entity<TextInput>,
     /// The theme name last reported by the daemon or picked in Settings ("dark", "light", "midnight", "auto").
     pub theme_choice: String,
     pub daemon_theme: String,
@@ -121,6 +132,11 @@ impl DroverApp {
         }).detach();
         let changes_in = crate::views::changes::ChangesInputs::new(cx);
         let machines_form = crate::views::machines::MachinesForm::new(cx);
+        let font_form = crate::views::settings_look::FontForm::new(cx);
+        let settings_editor = cx.new(|cx| TextInput::new_multiline(cx));
+        cx.subscribe(&settings_editor, |app, _, ev, cx| {
+            if let crate::views::text_input::InputEvent::Submit = ev { app.save_setting_file(cx); }
+        }).detach();
         let family = std::env::var("DROVER_NATIVE_FONT").unwrap_or_else(|_| theme::DEFAULT_TERMINAL_FONT.into());
         DroverApp { client, store: Store::default(), screens: Arc::default(), space: None, tab: None, connected: false,
                     status: "connecting…".into(), term_font: TermFont::new(&family, 13.0), switched_at: Arc::default(), last_switch: None,
@@ -129,11 +145,11 @@ impl DroverApp {
                     term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter, agents_send,
                     agents: Default::default(), changes: Default::default(), changes_in,
                     files: Default::default(), inbox_filter: Default::default(),
-                    settings: Default::default(), machines_form,
+                    settings: Default::default(), machines_form, rules: Default::default(),
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
                     chord: false, show_shortcuts: false, picker: None, want_term_focus: true,
-                    toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), base_size: 13.0, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
+                    toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 
     fn drain(&mut self) -> bool {
@@ -204,9 +220,17 @@ impl DroverApp {
 
     /// {family, size} from the daemon (0 / "" = unknown: keep ours). A new font re-sizes every pane.
     fn follow_terminal_font(&mut self, v: &serde_json::Value) {
-        let family = v["family"].as_str().filter(|f| !f.is_empty()).map(String::from)
-            .unwrap_or_else(|| self.term_font.font.family.to_string());
-        self.base_size = v["size"].as_f64().filter(|s| *s > 0.0).map(|s| s as f32).unwrap_or(self.base_size);
+        self.daemon_font = (v["family"].as_str().unwrap_or("").to_string(), v["size"].as_f64().unwrap_or(0.0) as f32);
+        self.refresh_font();
+    }
+
+    /// The font in use: this device's own choice, else what the daemon reports, else what we had.
+    pub fn refresh_font(&mut self) {
+        let family = if !self.font_own.family.is_empty() { self.font_own.family.clone() }
+            else if !self.daemon_font.0.is_empty() { self.daemon_font.0.clone() }
+            else { self.term_font.font.family.to_string() };
+        let size = if self.font_own.size > 0.0 { self.font_own.size } else if self.daemon_font.1 > 0.0 { self.daemon_font.1 } else { self.base_size };
+        self.base_size = size;
         self.apply_term_font(&family);
     }
 
@@ -314,7 +338,7 @@ impl Render for DroverApp {
         }
         match self.view {
             View::Agents => crate::views::agents::refresh(self),
-            View::Settings => crate::views::settings::refresh(self),
+            View::Settings => crate::views::settings::refresh(self, cx),
             _ => {}
         }
         crate::views::panel::refresh(self, cx);

@@ -5,7 +5,6 @@
 mod content;
 mod tree;
 
-pub use content::text_view;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

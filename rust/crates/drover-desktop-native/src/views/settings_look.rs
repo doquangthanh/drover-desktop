@@ -1,11 +1,51 @@
 //! Settings → Appearance (Herdr's "Look"): pick the theme. The choice is saved as `theme = "…"` at the top of
 //! settings.toml (comments and other lines stay) and applied at once; the daemon reports it to every window.
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, Entity, FontWeight, MouseButton, div, prelude::*, px, rgb};
 use serde_json::json;
 
+use crate::font_prefs::{self, OwnFont};
 use crate::theme::{self, Palette};
+use crate::views::text_input::TextInput;
+use crate::views::ui::{self, Kind};
 use crate::workspace_app::DroverApp;
+
+/// Terminal font fields: family (any installed monospace font, or typed) and size.
+pub struct FontForm {
+    pub family: Entity<TextInput>,
+    pub size: Entity<TextInput>,
+    /// `fonts.list`: monospace families installed on the machine running the daemon.
+    pub fonts: Option<Result<Vec<String>, String>>,
+    asked: bool,
+}
+
+impl FontForm {
+    pub fn new(cx: &mut Context<DroverApp>) -> Self {
+        FontForm { family: cx.new(|cx| TextInput::new("Same as your system terminal", cx)), size: cx.new(|cx| TextInput::new("size", cx)),
+                   fonts: None, asked: false }
+    }
+}
+
+/// Load the font list the first time Appearance is open.
+pub fn refresh(app: &mut DroverApp) {
+    if app.font_form.asked { return }
+    app.font_form.asked = true;
+    app.rpc_reply("fonts.list", json!({}), |app, r| {
+        app.font_form.fonts = Some(r.map(|v| v.as_array().into_iter().flatten().filter_map(|f| f.as_str()).map(String::from).collect()));
+    });
+}
+
+impl DroverApp {
+    /// Use `family` / `size` text from the form (empty = follow the daemon), keep it on this device and apply it now.
+    pub fn apply_own_font(&mut self, family: &str, size: &str, cx: &mut Context<Self>) {
+        let font = OwnFont { family: family.trim().to_string(), size: size.trim().parse::<f32>().ok().filter(|s| (8.0..=40.0).contains(s)).unwrap_or(0.0) };
+        match font_prefs::save_to(&font_prefs::path(), &font) {
+            Ok(()) => { self.font_own = font; self.refresh_font(); }
+            Err(e) => self.toasts.error(format!("Could not save the terminal font: {e}")),
+        }
+        cx.notify();
+    }
+}
 
 const THEMES: [(&str, &str, &str); 4] = [
     ("dark", "Dark", "default"), ("light", "Light", ""), ("midnight", "Midnight", ""), ("auto", "Auto", "follows the system"),
@@ -57,11 +97,47 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         row = row.child(swatch(p, label, note, current == id)
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { app.theme_choice = id.to_string(); app.choose_theme(id); cx.notify(); })));
     }
-    div().flex().flex_col().gap(px(12.)).p(px(18.)).max_w(px(760.))
-        .child(div().text_size(px(11.)).text_color(rgb(theme::dim())).font_weight(FontWeight::SEMIBOLD).child("THEME"))
+    let head = |t: &str| div().text_size(px(11.)).text_color(rgb(theme::dim())).font_weight(FontWeight::SEMIBOLD).child(t.to_string());
+    let f = &app.font_form;
+    let apply = cx.listener(|app, _, _, cx| {
+        let (family, size) = (app.font_form.family.read(cx).value(), app.font_form.size.read(cx).value());
+        app.apply_own_font(&family, &size, cx);
+    });
+    let reset = cx.listener(|app, _, _, cx| {
+        app.font_form.family.update(cx, |i, cx| i.set_text("", cx));
+        app.font_form.size.update(cx, |i, cx| i.set_text("", cx));
+        app.apply_own_font("", "", cx);
+    });
+    let mut list = div().flex().flex_wrap().gap(px(6.));
+    match &f.fonts {
+        Some(Ok(fonts)) => for name in fonts.iter().take(60) {
+            let n = name.clone();
+            list = list.child(ui::tab(name, app.font_own.family == *name).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {
+                app.font_form.family.update(cx, |i, cx| i.set_text(&n, cx));
+                let size = app.font_form.size.read(cx).value();
+                app.apply_own_font(&n, &size, cx);
+            })));
+        },
+        Some(Err(e)) => list = list.child(div().text_size(px(12.)).text_color(rgb(theme::error())).child(e.clone())),
+        None => list = list.child(div().text_size(px(12.)).text_color(rgb(theme::dim())).child("Loading fonts…")),
+    }
+    let sample = div().p(px(10.)).rounded(px(8.)).border_1().border_color(theme::border()).font_family(app.term_font.font.family.clone())
+        .text_size(px(app.term_font.size)).child("$ claude  ❯ 1. Yes  0O 1lI {}[] => != ✓");
+    let inner = div().id("settings-look").flex().flex_col().gap(px(12.)).p(px(18.)).max_w(px(760.)).size_full().overflow_y_scroll()
+        .child(head("THEME"))
         .child(row)
         .child(div().text_size(px(12.)).text_color(rgb(theme::dim()))
             .child("Saved as theme = \"…\" in settings.toml. Terminal text size: Ctrl+= / Ctrl+- / Ctrl+0."))
+        .child(head("TERMINAL FONT (THIS DEVICE)"))
+        .child(div().flex().items_center().gap(px(8.))
+            .child(div().flex_1().child(f.family.clone())).child(div().w(px(80.)).child(f.size.clone()))
+            .child(ui::button("Apply", Kind::Primary).on_mouse_down(MouseButton::Left, apply))
+            .child(ui::button("Reset", Kind::Plain).on_mouse_down(MouseButton::Left, reset)))
+        .child(sample)
+        .child(list)
+        .child(div().text_size(px(12.)).text_color(rgb(theme::dim()))
+            .child("Pick a font or type its name, size 8–40. Empty = the same font and size as your system terminal."));
+    div().flex().flex_col().flex_1().min_h_0().child(inner)
 }
 
 #[cfg(test)]
