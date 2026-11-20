@@ -39,6 +39,13 @@ impl DroverApp {
             cx.stop_propagation();
             return;
         }
+        if self.view != crate::views::View::Terminals {
+            // A view is shown: keys are not for the agents; Escape goes back to the terminals.
+            if ev.keystroke.key == "escape" {
+                self.set_view(crate::views::View::Terminals, window, cx);
+            }
+            return;
+        }
         let m = &ev.keystroke.modifiers;
         let key = ev.keystroke.key.as_str();
         // Copy while text is selected (else Ctrl+C reaches the agent); paste the clipboard (terminal_selection.rs).
@@ -108,7 +115,7 @@ impl EntityInputHandler for DroverApp {
 
     fn replace_text_in_range(&mut self, _: Option<Range<usize>>, text: &str, _: &mut Window, cx: &mut Context<Self>) {
         self.marked = None;
-        if !text.is_empty() && self.confirm.is_none() {
+        if !text.is_empty() && self.confirm.is_none() && self.view == crate::views::View::Terminals {
             self.send_to_focused(text.to_string());
         }
         cx.notify();

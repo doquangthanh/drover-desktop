@@ -6,6 +6,7 @@ use gpui::{Context, Div, FontWeight, Image, ImageFormat, MouseButton, div, img, 
 
 use crate::theme::{self, BLOCKED, CHROME, DIM, DONE, FG, MUTED, UI_FONT};
 use crate::widgets::{age, avatar, icon, kind_icon, state_mark};
+use crate::views::View;
 use crate::workspace_app::DroverApp;
 
 fn ibtn(name: &str) -> Div {
@@ -88,14 +89,18 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     }
 
     let blocked = app.store.panes.iter().filter(|p| p.state == "blocked").count();
-    let foot_row = |name: &str, label: &str| div().h(px(28.)).flex().items_center().gap(px(9.)).px(px(8.)).rounded(px(8.))
-        .text_color(rgb(MUTED)).hover(|d| d.bg(theme::hover())).child(icon(name, 15., MUTED)).child(div().flex_1().child(label.to_string()));
-    let web = |view: &'static str| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, _: &mut gpui::Window, _: &mut Context<DroverApp>| app.open_web(view));
+    let foot_row = |view: View| {
+        let on = app.view == view;
+        div().h(px(28.)).flex().items_center().gap(px(9.)).px(px(8.)).rounded(px(8.)).text_color(rgb(if on { FG } else { MUTED }))
+            .when(on, |d| d.bg(theme::selected())).hover(|d| d.bg(theme::hover()))
+            .child(icon(view.icon(), 15., if on { FG } else { MUTED })).child(div().flex_1().child(view.title()))
+    };
+    let show = |view: View| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, window: &mut gpui::Window, cx: &mut Context<DroverApp>| app.set_view(view, window, cx));
     let foot = div().flex_none().border_t_1().border_color(theme::border()).pt(px(4.)).px(px(8.)).pb(px(8.))
-        .child(foot_row("inbox", "Inbox").when(blocked > 0, |d| d.child(div().text_size(px(11.)).text_color(rgb(BLOCKED)).child(blocked.to_string())))
-            .on_mouse_down(MouseButton::Left, web("inbox")))
-        .child(foot_row("server", "Machines").on_mouse_down(MouseButton::Left, web("machines")))
-        .child(foot_row("gear", "Settings").on_mouse_down(MouseButton::Left, web("settings")));
+        .child(foot_row(View::Inbox).when(blocked > 0, |d| d.child(div().text_size(px(11.)).text_color(rgb(BLOCKED)).child(blocked.to_string())))
+            .on_mouse_down(MouseButton::Left, show(View::Inbox)))
+        .child(foot_row(View::Machines).on_mouse_down(MouseButton::Left, show(View::Machines)))
+        .child(foot_row(View::Settings).on_mouse_down(MouseButton::Left, show(View::Settings)));
 
     let half = || div().flex_1().min_h_0().flex().flex_col().overflow_hidden();
     div().w(px(260.)).flex_none().flex().flex_col().bg(rgb(CHROME)).border_r_1().border_color(theme::border())

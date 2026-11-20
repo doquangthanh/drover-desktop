@@ -10,6 +10,7 @@ mod terminal_paint;
 mod terminal_selection;
 mod theme;
 mod topbar;
+mod views;
 mod widgets;
 mod workspace_app;
 

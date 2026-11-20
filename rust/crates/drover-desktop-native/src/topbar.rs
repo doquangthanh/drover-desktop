@@ -4,11 +4,15 @@ use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
 
 use crate::theme::{self, ACCENT, BLOCKED, CHROME, DIM, DONE, ERROR, FG, MUTED, RAISED, UI_FONT, tint};
 use crate::widgets::{icon, key_cap, kind_icon, short_path, state_mark};
+use crate::views::View;
 use crate::workspace_app::DroverApp;
 
-fn pb(icon_name: &str, label: &str) -> Div {
-    div().h(px(26.)).flex().items_center().gap(px(5.)).px(px(8.)).rounded(px(6.)).text_size(px(12.)).text_color(rgb(MUTED))
-        .hover(|d| d.bg(theme::hover()).text_color(rgb(FG))).child(icon(icon_name, 14., MUTED)).child(label.to_string())
+fn pb(view: View, shown: View) -> Div {
+    let on = view == shown;
+    div().h(px(26.)).flex().items_center().gap(px(5.)).px(px(8.)).rounded(px(6.)).text_size(px(12.))
+        .text_color(rgb(if on { FG } else { MUTED })).when(on, |d| d.bg(theme::selected()))
+        .hover(|d| d.bg(theme::hover()).text_color(rgb(FG))).child(icon(view.icon(), 14., if on { FG } else { MUTED }))
+        .child(view.title())
 }
 
 pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
@@ -16,7 +20,7 @@ pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .bg(rgb(CHROME)).border_b_1().border_color(theme::border()).font_family(UI_FONT);
     if let Some(space) = app.space.as_deref() {
         for t in app.store.tabs_of(space) {
-            let on = app.tab.as_deref() == Some(t.id.as_str());
+            let on = app.view == View::Terminals && app.tab.as_deref() == Some(t.id.as_str());
             let (id, close_id) = (t.id.clone(), t.id.clone());
             // The tab shows its most urgent agent, else its first pane.
             let lead = app.store.panes.iter().filter(|p| p.tab_id == t.id)
@@ -39,15 +43,15 @@ pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
             .hover(|d| d.bg(theme::hover())).child(icon("plus", 14., DIM))
             .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_tab(cx))));
     }
-    let web = |view: &'static str| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, _: &mut gpui::Window, _: &mut Context<DroverApp>| app.open_web(view));
+    let show = |view: View| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, window: &mut gpui::Window, cx: &mut Context<DroverApp>| app.set_view(view, window, cx));
     bar.child(div().flex_1())
         .child(div().flex().items_center().gap(px(2.))
             .child(div().size(px(26.)).rounded(px(6.)).flex().items_center().justify_center().hover(|d| d.bg(theme::hover()))
                 .child(icon("sidebar", 15., DIM))
                 .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.sidebar_open = !app.sidebar_open; cx.notify(); })))
-            .child(pb("layers", "Agents").on_mouse_down(MouseButton::Left, web("tree")))
-            .child(pb("folder", "Files").on_mouse_down(MouseButton::Left, web("files")))
-            .child(pb("branch", "Changes").on_mouse_down(MouseButton::Left, web("changes"))))
+            .child(pb(View::Agents, app.view).on_mouse_down(MouseButton::Left, show(View::Agents)))
+            .child(pb(View::Files, app.view).on_mouse_down(MouseButton::Left, show(View::Files)))
+            .child(pb(View::Changes, app.view).on_mouse_down(MouseButton::Left, show(View::Changes))))
 }
 
 pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
@@ -64,7 +68,7 @@ pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     if let Some(branch) = space.and_then(|s| s.branch.clone()) {
         let dirty = space.and_then(|s| s.dirty).unwrap_or(0);
         bar = bar.child(div().h(px(20.)).px(px(7.)).rounded(px(5.)).flex().items_center().gap(px(5.)).max_w(px(240.))
-            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, _| app.open_web("changes")))
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.set_view(View::Changes, window, cx)))
             .bg(tint(ACCENT, 0.14)).text_color(rgb(ACCENT)).text_size(px(11.)).font_weight(FontWeight::SEMIBOLD)
             .child(icon("branch", 12., ACCENT)).child(div().truncate().child(branch))
             .when(dirty > 0, |d| d.child(div().text_color(rgb(BLOCKED)).child(format!("●{dirty}")))));

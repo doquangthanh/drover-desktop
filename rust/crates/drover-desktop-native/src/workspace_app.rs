@@ -9,10 +9,11 @@ use alacritty_terminal::grid::Dimensions;
 use drover_core::screen::PaneScreen;
 use drover_proto::client::{self, Client, Command, Incoming};
 use drover_proto::store::Store;
-use gpui::{Bounds, Context, FocusHandle, Pixels, Window, div, prelude::*, rgb};
+use gpui::{Bounds, Context, Entity, FocusHandle, Pixels, Window, div, prelude::*, rgb};
 
 use crate::terminal_paint::TermFont;
-use crate::{layout_view, sidebar, theme, topbar};
+use crate::views::{View, text_input::TextInput};
+use crate::{layout_view, sidebar, theme, topbar, views};
 
 pub type Screens = Arc<Mutex<HashMap<String, PaneScreen>>>;
 const HISTORY: usize = 5000;
@@ -49,6 +50,9 @@ pub struct DroverApp {
     pub term_bounds: Arc<Mutex<HashMap<String, Bounds<Pixels>>>>,
     pub selecting: Option<String>,
     pub hover_link: Option<crate::terminal_selection::HoverLink>,
+    /// What the main area shows: the terminals or one of the views (views/mod.rs).
+    pub view: View,
+    pub agents_filter: Entity<TextInput>,
 }
 
 impl DroverApp {
@@ -65,12 +69,14 @@ impl DroverApp {
             }
         })
         .detach();
+        let agents_filter = cx.new(|cx| TextInput::new("Filter agents", cx));
+        cx.observe(&agents_filter, |_, _, cx| cx.notify()).detach();
         let family = std::env::var("DROVER_NATIVE_FONT").unwrap_or_else(|_| theme::DEFAULT_TERMINAL_FONT.into());
         DroverApp { client, store: Store::default(), screens: Arc::default(), space: None, tab: None, connected: false,
                     status: "connecting…".into(), term_font: TermFont::new(&family, 13.0), switched_at: Arc::default(), last_switch: None,
                     focused: None, term_focus: cx.focus_handle(), marked: None, cursor_bounds: Arc::default(),
                     sizes: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true,
-                    term_bounds: Arc::default(), selecting: None, hover_link: None }
+                    term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter }
     }
 
     fn drain(&mut self) -> bool {
@@ -185,6 +191,7 @@ impl DroverApp {
 
     pub fn select_tab(&mut self, id: String, cx: &mut Context<Self>) {
         self.mark_switch();
+        self.view = View::Terminals;
         self.tab = Some(id);
         self.keep_selection_valid();
         cx.notify();
@@ -203,7 +210,12 @@ impl DroverApp {
 }
 
 impl Render for DroverApp {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Terminals shown, or a question open: keys belong to the app, not to a view's field (e.g. after a tab
+        // click left a view, or a close was asked from the sidebar while a field had focus).
+        if (self.view == View::Terminals || self.confirm.is_some()) && !self.term_focus.is_focused(window) {
+            window.focus(&self.term_focus);
+        }
         let main = div()
             .flex()
             .flex_col()
@@ -212,7 +224,7 @@ impl Render for DroverApp {
             .track_focus(&self.term_focus)
             .on_key_down(cx.listener(Self::on_key))
             .child(topbar::tab_bar(self, cx))
-            .child(layout_view::tab_body(self, cx));
+            .child(if self.view == View::Terminals { layout_view::tab_body(self, cx) } else { views::body(self, cx) });
         let overlay = crate::dialogs::confirm_overlay(self, cx);
         div()
             .relative()

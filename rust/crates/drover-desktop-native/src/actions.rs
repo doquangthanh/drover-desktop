@@ -29,8 +29,9 @@ pub enum Then {
     CloseSpace(String),
 }
 
-/// An rpc reply to act on when it arrives (checked by the drain loop).
-pub type Pending = (Receiver<Result<Value, String>>, fn(&mut DroverApp, Value));
+/// What to do with an rpc reply when it arrives (checked by the drain loop).
+pub type OnReply = Box<dyn FnOnce(&mut DroverApp, Result<Value, String>)>;
+pub type Pending = (Receiver<Result<Value, String>>, OnReply);
 
 /// Views the native app does not have yet: opened in the browser through the web UI (`#view` in main.tsx).
 pub const WEB_VIEWS: [&str; 7] = ["inbox", "changes", "files", "machines", "settings", "server", "tree"];
@@ -42,24 +43,38 @@ impl DroverApp {
     }
 
     fn rpc_then(&mut self, method: &str, params: Value, then: fn(&mut DroverApp, Value)) {
+        self.rpc_reply(method, params, move |app, r| match r {
+            Ok(v) => then(app, v),
+            Err(e) => eprintln!("drover: {e}"),
+        });
+    }
+
+    /// Send an rpc and hand its reply, value or error, to `then` (views show the error themselves).
+    pub fn rpc_reply(&mut self, method: &str, params: Value, then: impl FnOnce(&mut DroverApp, Result<Value, String>) + 'static) {
         trace(&format!("rpc {method} {params} (waits for the reply)"));
         let (tx, rx) = channel();
         let _ = self.client.commands.send(Command::Rpc { method: method.into(), params, reply: Some(tx) });
-        self.pending.push((rx, then));
+        self.pending.push((rx, Box::new(then)));
     }
 
     /// Run the callbacks of replies that arrived. True when one ran.
     pub fn take_replies(&mut self) -> bool {
         let mut ready = vec![];
-        self.pending.retain(|(rx, then)| match rx.try_recv() {
-            Ok(Ok(v)) => { trace(&format!("reply {v}")); ready.push((*then, v)); false }
-            Ok(Err(e)) => { eprintln!("drover: {e}"); false }
-            Err(std::sync::mpsc::TryRecvError::Empty) => true,
-            Err(_) => false,
-        });
+        for (rx, then) in std::mem::take(&mut self.pending) {
+            match rx.try_recv() {
+                Ok(r) => {
+                    if std::env::var_os("DROVER_NATIVE_TRACE").is_some() {
+                        trace(&format!("reply {r:?}"));
+                    }
+                    ready.push((then, r));
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => self.pending.push((rx, then)),
+                Err(_) => ready.push((then, Err("drover-server went away".into()))),
+            }
+        }
         let ran = !ready.is_empty();
-        for (then, v) in ready {
-            then(self, v);
+        for (then, r) in ready {
+            then(self, r);
         }
         ran
     }
@@ -67,6 +82,7 @@ impl DroverApp {
     /// Show a pane: its space and tab, keys go to it, the daemon marks it read.
     pub fn show_pane(&mut self, pane: &str) {
         let Some(p) = self.store.pane(pane) else { return };
+        self.view = crate::views::View::Terminals;
         self.space = Some(p.space_id.clone());
         self.tab = Some(p.tab_id.clone());
         self.focused = Some(pane.to_string());
