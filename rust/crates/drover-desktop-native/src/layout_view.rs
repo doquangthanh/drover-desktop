@@ -47,6 +47,10 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
     let (screens, tf, switched, sizes) = (app.screens.clone(), app.term_font.clone(), app.switched_at.clone(), app.sizes.clone());
     let (commands, cursor_at, focus) = (app.client.commands.clone(), app.cursor_bounds.clone(), app.term_focus.clone());
     let marked = if focused { app.marked.clone() } else { None };
+    let link = app.hover_link.as_ref().filter(|l| l.pane == pane_id).map(|l| (l.line, l.cols.clone()));
+    let on_link = link.is_some();
+    let term_bounds = app.term_bounds.clone();
+    let (sel_down, sel_move, sel_up) = (id.clone(), id.clone(), id.clone());
     let entity = cx.entity();
     let (click_id, wheel_id) = (id.clone(), id.clone());
     let (split_id, down_id, zoom_id, close_id) = (id.clone(), id.clone(), id.clone(), id.clone());
@@ -67,8 +71,14 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
             .child(hbtn("zoom").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.toggle_zoom(&zoom_id); cx.notify(); })))
             .child(hbtn("close").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_pane(&close_id, cx); }))))
         .child(div().flex().flex_1().min_h_0().min_w_0().pt(px(10.)).pr(px(6.)).pb(px(6.)).pl(px(14.))
+            .when(on_link, |d| d.cursor_pointer()).when(!on_link, |d| d.cursor_text())
+            // Select, copy on release, open links (terminal_selection.rs).
+            .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev, window, cx| app.select_start(&sel_down, ev, window, cx)))
+            .on_mouse_move(cx.listener(move |app, ev, window, cx| app.select_move(&sel_move, ev, window, cx)))
+            .on_mouse_up(MouseButton::Left, cx.listener(move |app, ev, window, cx| app.select_end(&sel_up, ev, window, cx)))
             .child(canvas(|_, _, _| {}, move |bounds: Bounds<Pixels>, _, window, cx| {
             let started = std::time::Instant::now();
+            term_bounds.lock().unwrap().insert(id.clone(), bounds);
             // Size the pane to this frame; ask the daemon only when cols x rows really change.
             let cell_w = terminal_paint::cell_width(&tf, window);
             let cols = (f32::from(bounds.size.width) / f32::from(cell_w)).floor().max(2.) as u16;
@@ -86,7 +96,7 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
                 window.handle_input(&focus, ElementInputHandler::new(bounds, entity.clone()), cx);
             }
             if let Some(screen) = screens.lock().unwrap().get(&id) {
-                let cursor = terminal_paint::paint(screen, &tf, bounds, focused, marked.as_deref(), window, cx);
+                let cursor = terminal_paint::paint(screen, &tf, bounds, focused, marked.as_deref(), link.clone(), window, cx);
                 if focused {
                     *cursor_at.lock().unwrap() = Some(cursor);
                 }

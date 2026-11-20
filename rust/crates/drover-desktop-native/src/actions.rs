@@ -158,10 +158,14 @@ impl DroverApp {
     pub fn open_web(&self, view: &str) {
         let Ok((port, token)) = drover_proto::client::daemon_address() else { return };
         let hash = if WEB_VIEWS.contains(&view) { format!("#{view}") } else { String::new() };
-        let url = format!("http://127.0.0.1:{port}/?token={token}{hash}");
-        let opener = if cfg!(target_os = "macos") { "open" } else if cfg!(windows) { "explorer" } else { "xdg-open" };
-        if let Err(e) = std::process::Command::new(opener).arg(&url).spawn() {
-            eprintln!("drover: cannot open the browser ({opener}): {e}");
-        }
+        open_in_browser(&format!("http://127.0.0.1:{port}/?token={token}{hash}"));
+    }
+}
+
+/// Open `url` in the default browser (links in terminals, web-only views).
+pub fn open_in_browser(url: &str) {
+    let opener = if cfg!(target_os = "macos") { "open" } else if cfg!(windows) { "explorer" } else { "xdg-open" };
+    if let Err(e) = std::process::Command::new(opener).arg(url).spawn() {
+        eprintln!("drover: cannot open the browser ({opener}): {e}");
     }
 }

@@ -2,7 +2,7 @@
 //! Colours are the web UI's dark xterm theme (`core/theme.ts`), so both clients show the same terminal.
 
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
@@ -87,10 +87,19 @@ fn run_for(flags: Flags, fg: u32, tf: &TermFont) -> TextRun {
     TextRun { len: 0, font, color, background_color: None, underline, strikethrough: None }
 }
 
+/// The selection highlight of the web UI's dark theme: rgba(150,178,215,.32).
+fn selection_color() -> Hsla {
+    let mut c = hsla(0x96b2d7);
+    c.a = 0.32;
+    c
+}
+
 /// Paint `screen` into `bounds`, scrolled by its display offset. `marked` is text the input method is still
-/// composing, drawn at the cursor. Returns where the cursor cell is (for the IME candidate window).
+/// composing, drawn at the cursor; `link` (grid line, columns) is underlined. Returns where the cursor cell is
+/// (for the IME candidate window).
+#[allow(clippy::too_many_arguments)]
 pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused: bool, marked: Option<&str>,
-             window: &mut Window, cx: &mut App) -> Bounds<Pixels> {
+             link: Option<(i32, std::ops::Range<usize>)>, window: &mut Window, cx: &mut App) -> Bounds<Pixels> {
     let ts = window.text_system().clone();
     let cell_w = cell_width(tf, window);
     let lh = px(tf.line_height);
@@ -98,6 +107,7 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
     let grid = term.grid();
     let (rows, cols) = (grid.screen_lines(), grid.columns());
     let offset = grid.display_offset() as i32;
+    let selection = term.selection.as_ref().and_then(|s| s.to_range(term));
     for r in 0..rows {
         let y = bounds.origin.y + lh * r as f32;
         if y > bounds.origin.y + bounds.size.height {
@@ -120,6 +130,10 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
                 let w = if cell.flags.contains(Flags::WIDE_CHAR) { cell_w * 2. } else { cell_w };
                 window.paint_quad(fill(Bounds::new(point(x, y), size(w, lh)), hsla(bg)));
             }
+            if selection.as_ref().is_some_and(|s| s.contains(Point::new(Line(r as i32 - offset), Column(c)))) {
+                let w = if cell.flags.contains(Flags::WIDE_CHAR) { cell_w * 2. } else { cell_w };
+                window.paint_quad(fill(Bounds::new(point(bounds.origin.x + cell_w * c as f32, y), size(w, lh)), selection_color()));
+            }
             let ch = if cell.c == '\0' || cell.flags.contains(Flags::HIDDEN) { ' ' } else { cell.c };
             let start = text.len();
             text.push(ch);
@@ -135,6 +149,11 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
         }
         let line = ts.shape_line(SharedString::from(text), px(tf.size), &runs, Some(cell_w));
         let _ = line.paint(point(bounds.origin.x, y), lh, window, cx);
+        if let Some((_, cols)) = link.as_ref().filter(|(l, _)| *l == r as i32 - offset) {
+            let under = Bounds::new(point(bounds.origin.x + cell_w * cols.start as f32, y + lh - px(2.)),
+                                    size(cell_w * cols.len() as f32, px(1.)));
+            window.paint_quad(fill(under, hsla(FG)));
+        }
     }
     let cur = grid.cursor.point;
     let cursor = Bounds::new(point(bounds.origin.x + cell_w * cur.column.0 as f32, bounds.origin.y + lh * (cur.line.0 + offset) as f32),

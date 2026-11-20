@@ -44,6 +44,11 @@ pub struct DroverApp {
     pub show_when_known: Option<String>,
     pub confirm: Option<crate::actions::Confirm>,
     pub sidebar_open: bool,
+    /// Where each pane's terminal grid was painted (mouse position -> cell), the pane a drag is selecting in,
+    /// and the link under the mouse.
+    pub term_bounds: Arc<Mutex<HashMap<String, Bounds<Pixels>>>>,
+    pub selecting: Option<String>,
+    pub hover_link: Option<crate::terminal_selection::HoverLink>,
 }
 
 impl DroverApp {
@@ -64,7 +69,8 @@ impl DroverApp {
         DroverApp { client, store: Store::default(), screens: Arc::default(), space: None, tab: None, connected: false,
                     status: "connecting…".into(), term_font: TermFont::new(&family, 13.0), switched_at: Arc::default(), last_switch: None,
                     focused: None, term_focus: cx.focus_handle(), marked: None, cursor_bounds: Arc::default(),
-                    sizes: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true }
+                    sizes: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true,
+                    term_bounds: Arc::default(), selecting: None, hover_link: None }
     }
 
     fn drain(&mut self) -> bool {

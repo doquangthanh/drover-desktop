@@ -40,6 +40,17 @@ impl DroverApp {
             return;
         }
         let m = &ev.keystroke.modifiers;
+        let key = ev.keystroke.key.as_str();
+        // Copy while text is selected (else Ctrl+C reaches the agent); paste the clipboard (terminal_selection.rs).
+        let copy = m.control && !m.alt && key == "c" && (self.copy_selection(cx) || m.shift);
+        let paste = (m.control && !m.alt && key == "v") || (m.shift && !m.control && key == "insert");
+        if copy || paste {
+            if paste {
+                self.paste(cx);
+            }
+            cx.stop_propagation();
+            return;
+        }
         let mods = Mods { ctrl: m.control, alt: m.alt, shift: m.shift };
         if let Some(bytes) = keystroke_bytes(&ev.keystroke.key, mods, self.app_cursor()) {
             self.send_to_focused(bytes);

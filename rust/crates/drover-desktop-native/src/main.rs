@@ -7,12 +7,13 @@ mod layout_view;
 mod sidebar;
 mod terminal_input;
 mod terminal_paint;
+mod terminal_selection;
 mod theme;
 mod topbar;
 mod widgets;
 mod workspace_app;
 
-use gpui::{App, Application, Bounds, WindowBounds, WindowOptions, prelude::*, px, size};
+use gpui::{App, Application, Bounds, TitlebarOptions, WindowBounds, WindowOptions, prelude::*, px, size};
 
 use workspace_app::DroverApp;
 
@@ -21,7 +22,11 @@ fn main() {
         assets::load_fonts(cx);
         let bounds = Bounds::centered(None, size(px(1500.), px(900.)), cx);
         cx.open_window(
-            WindowOptions { window_bounds: Some(WindowBounds::Windowed(bounds)), ..Default::default() },
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(TitlebarOptions { title: Some("Drover".into()), ..Default::default() }),
+                ..Default::default()
+            },
             |_, cx| cx.new(DroverApp::new),
         )
         .expect("open window");
