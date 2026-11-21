@@ -13,5 +13,5 @@ path = "src/main.rs"
 gpui = "=0.2.2"
 alacritty_terminal = "=0.26.0"  # same pin as drover-core
 serde_json = "1.0.154"
-drover-core = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.1-dev" }
-drover-proto = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.1-dev" }
+drover-core = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.2" }
+drover-proto = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.2" }
