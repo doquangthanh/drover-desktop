@@ -40,6 +40,9 @@ pub struct DroverApp {
     pub cursor_bounds: Arc<Mutex<Option<Bounds<Pixels>>>>,
     /// Last cols x rows this window asked the daemon for, per pane. Cleared to take the size back.
     pub sizes: Arc<Mutex<HashMap<String, (u16, u16)>>>,
+    /// When this window last sent pane.resize, per pane: until the daemon reports that size, events it sent
+    /// before handling the resize still carry the old one, and following them would shrink the screen.
+    pub resize_sent: Arc<Mutex<HashMap<String, std::time::Instant>>>,
     /// Replies to act on (e.g. focus the pane a button just created), and a pane to show once the store has it.
     pub pending: Vec<crate::actions::Pending>,
     pub show_when_known: Option<String>,
@@ -144,7 +147,7 @@ impl DroverApp {
         DroverApp { client, store: Store::default(), screens: Arc::default(), space: None, tab: None, connected: false,
                     status: "connecting…".into(), term_font: TermFont::new(&family, 13.0), switched_at: Arc::default(), last_switch: None,
                     focused: None, term_focus: cx.focus_handle(), marked: None, cursor_bounds: Arc::default(),
-                    sizes: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true,
+                    sizes: Arc::default(), resize_sent: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true,
                     term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter, agents_send,
                     agents: Default::default(), changes: Default::default(), changes_in,
                     files: Default::default(), inbox_filter: Default::default(),
@@ -198,7 +201,11 @@ impl DroverApp {
         let Some(p) = self.store.pane(pane) else { return };
         let mut screens = self.screens.lock().unwrap();
         if replay || !screens.contains_key(pane) {
-            screens.insert(pane.to_string(), PaneScreen::new(p.cols.max(2) as usize, p.rows.max(2) as usize, HISTORY));
+            // Prefer the size this window measured and sent (pane.resize): the store can still hold the size the pane
+            // was created at (120x32), and output written for more rows would scroll blank lines into history, which
+            // the next grow pulls back on screen, pushing the content down.
+            let (cols, rows) = self.sizes.lock().unwrap().get(pane).copied().unwrap_or((p.cols, p.rows));
+            screens.insert(pane.to_string(), PaneScreen::new(cols.max(2) as usize, rows.max(2) as usize, HISTORY));
         }
         if let Some(s) = screens.get_mut(pane) {
             s.feed(data.as_bytes());
@@ -211,10 +218,20 @@ impl DroverApp {
     /// The daemon owns each pane's size (shared by all viewers): follow it.
     fn fit_screens(&mut self) {
         let mut screens = self.screens.lock().unwrap();
+        let sizes = self.sizes.lock().unwrap();
+        let sent = self.resize_sent.lock().unwrap();
         for p in &self.store.panes {
+            // Our own resize is on its way: shrinking to the old size would scroll blank lines into history, which the
+            // grow that follows pulls back on screen (the prompt lands several lines down).
+            let waiting = sizes.get(&p.id).is_some_and(|&want| want != (p.cols, p.rows))
+                && sent.get(&p.id).is_some_and(|t| t.elapsed() < Duration::from_secs(2));
+            if waiting {
+                continue;
+            }
             if let Some(s) = screens.get_mut(&p.id) {
                 let g = s.term().grid();
                 if (g.columns(), g.screen_lines()) != (p.cols as usize, p.rows as usize) && p.cols > 1 && p.rows > 1 {
+                    crate::actions::trace(&format!("fit {} to {}x{}", p.id, p.cols, p.rows));
                     s.resize(p.cols as usize, p.rows as usize);
                 }
             }

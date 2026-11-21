@@ -77,6 +77,7 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
     let link = app.hover_link.as_ref().filter(|l| l.pane == pane_id).map(|l| (l.line, l.cols.clone()));
     let on_link = link.is_some();
     let term_bounds = app.term_bounds.clone();
+    let resize_sent = app.resize_sent.clone();
     let (sel_down, sel_move, sel_up) = (id.clone(), id.clone(), id.clone());
     let entity = cx.entity();
     let (click_id, wheel_id) = (id.clone(), id.clone());
@@ -113,6 +114,7 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
             if sizes.lock().unwrap().insert(id.clone(), (cols, rows)) != Some((cols, rows)) {
                 let _ = commands.send(Command::Rpc { method: "pane.resize".into(),
                     params: json!({"pane": id, "cols": cols, "rows": rows}), reply: None });
+                resize_sent.lock().unwrap().insert(id.clone(), std::time::Instant::now());
                 if let Some(s) = screens.lock().unwrap().get_mut(&id)
                     && (s.term().grid().columns(), s.term().grid().screen_lines()) != (cols as usize, rows as usize)
                 {
