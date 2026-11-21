@@ -1452,7 +1452,7 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 [[package]]
 name = "drover-core"
 version = "0.2.2"
-source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.5#089c2571cd62b8905b3a1c2a8cbddc2525f4d5fd"
+source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.6#cfb71f94ba831f27839a15f76fd0cd96513cbbce"
 dependencies = [
  "alacritty_terminal",
  "portable-pty",
@@ -1465,7 +1465,7 @@ dependencies = [
 
 [[package]]
 name = "drover-desktop-native"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "alacritty_terminal",
  "drover-core",
@@ -1478,7 +1478,7 @@ dependencies = [
 [[package]]
 name = "drover-proto"
 version = "0.2.2"
-source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.5#089c2571cd62b8905b3a1c2a8cbddc2525f4d5fd"
+source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.6#cfb71f94ba831f27839a15f76fd0cd96513cbbce"
 dependencies = [
  "dirs 7.0.0",
  "drover-core",
