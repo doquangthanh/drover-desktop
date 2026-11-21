@@ -2,7 +2,8 @@
 
 use drover_proto::agent_tree::{self, TreeRow};
 use drover_proto::wire::Pane;
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 
 use crate::theme::{self, blocked, dim, done, fg, muted, working};
 use crate::views::ui;

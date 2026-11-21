@@ -1,7 +1,8 @@
 //! Machines (port of `machines-view.tsx`, `machine-card.tsx`, `machine-add-form.tsx`): this computer and each remote
 //! machine with its connection state, Remove (asked first), and the "Add a machine" form (test, add, install dr).
 
-use gpui::{Context, Div, Entity, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, Entity, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 use serde_json::{Value, json};
 
 use crate::actions::{Confirm, Then};

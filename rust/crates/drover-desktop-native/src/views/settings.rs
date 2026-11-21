@@ -2,7 +2,8 @@
 //! each file read-only with its validation errors; "Open in editor" opens it in the system editor (the daemon
 //! reloads it on save) and the web UI still has the in-place editor. Updates are checked and applied here.
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 use serde_json::{Value, json};
 
 use crate::actions::{Confirm, Then, open_in_browser};
@@ -159,10 +160,13 @@ fn updates(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         Some(Err(e)) => d = d.child(div().text_color(rgb(if e == "Checking…" { dim() } else { error() })).child(e.clone())),
         None => {}
     }
-    d.child(div().flex().child(ui::button("Check for updates", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| {
-        app.settings.update = None;
-        cx.notify();
-    }))))
+    d.child(div().flex().gap(px(8.))
+        .child(ui::button("Check for updates", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| {
+            app.settings.update = None;
+            cx.notify();
+        })))
+        .child(ui::button("What's new", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.set_view(crate::views::View::WhatsNew, window, cx))))
+        .child(ui::button("Send feedback", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.set_view(crate::views::View::Feedback, window, cx)))))
 }
 
 pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {

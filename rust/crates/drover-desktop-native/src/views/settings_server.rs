@@ -1,7 +1,8 @@
 //! Settings → Server (port of `server-view.tsx`): the daemon's process, connected clients and config problems,
 //! "Test notification", and Stop (asked first: stopping the server stops the agents too).
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 use serde_json::json;
 
 use crate::actions::{Confirm, Then};

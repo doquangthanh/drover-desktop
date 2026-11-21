@@ -2,7 +2,8 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gpui::{Animation, AnimationExt, Div, IntoElement, Styled, Svg, Transformation, div, percentage, prelude::*, px, rgb, svg};
+use gpui::{Animation, AnimationExt, Div, IntoElement, Styled, Svg, Transformation, div, percentage, prelude::*, rgb, svg};
+use crate::ui_scale::px;
 
 use crate::theme::{self, AVATAR, blocked, dim, done, error, working, kind_badge, tint};
 

@@ -3,7 +3,8 @@
 
 use drover_proto::changes::Worktree;
 use drover_proto::wire::Pane;
-use gpui::{Context, Div, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 use serde_json::json;
 
 use crate::theme::{self, accent, blocked, dim, fg, muted, yellow, tint};

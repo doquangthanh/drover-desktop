@@ -1,7 +1,8 @@
 //! The right panel beside the terminals, as in Herdr: Agents, Files or Changes of the focused pane (its agent, its
 //! folder, its worktree), following the focus. Opened and closed from the tab bar's buttons.
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 
 use super::{View, agents, changes, files};
 use crate::theme::{self, chrome, dim, muted};

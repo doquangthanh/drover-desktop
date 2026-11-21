@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use gpui::{Context, Div, FontWeight, Image, ImageFormat, MouseButton, div, img, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, Image, ImageFormat, MouseButton, div, img, prelude::*, rgb};
+use crate::ui_scale::px;
 
 use crate::theme::{self, chrome, dim, done, fg, muted, UI_FONT};
 use crate::widgets::{age, avatar, icon, kind_icon, state_mark};

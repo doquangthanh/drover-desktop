@@ -1,6 +1,7 @@
 //! Files view, left panel (`file-tree.tsx`): All (lazy folders) or Changed (git status), status badges.
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 
 use super::Entry;
 use crate::theme::{self, accent, dim, done, error, fg, yellow};

@@ -64,6 +64,14 @@ impl DroverApp {
         self.pending.push((rx, Box::new(then)));
     }
 
+    /// GET `url` with the system `curl` (like the daemon does), off the UI thread; `then` gets the text or the error.
+    pub fn http_get(&mut self, url: &str, then: impl FnOnce(&mut DroverApp, Result<String, String>) + 'static) {
+        let (tx, rx) = channel();
+        let url = url.to_string();
+        std::thread::spawn(move || { let _ = tx.send(curl_text(&url).map(Value::String)); });
+        self.pending.push((rx, Box::new(move |app, r| then(app, r.and_then(|v| v.as_str().map(String::from).ok_or_else(|| "bad reply".to_string()))))));
+    }
+
     /// Run the callbacks of replies that arrived. True when one ran.
     pub fn take_replies(&mut self) -> bool {
         let mut ready = vec![];
@@ -223,6 +231,18 @@ impl DroverApp {
         let hash = if WEB_VIEWS.contains(&view) { format!("#{view}") } else { String::new() };
         open_in_browser(&format!("http://127.0.0.1:{port}/?token={token}{hash}"));
     }
+}
+
+fn curl_text(url: &str) -> Result<String, String> {
+    let mut cmd = std::process::Command::new("curl");
+    cmd.args(["-sSLf", "--max-time", "15", "-A", "drover", url]);
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // no console window
+    let out = cmd.output().map_err(|e| format!("could not run curl: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("{}", String::from_utf8_lossy(&out.stderr).trim()).chars().take(200).collect::<String>().replace("curl: ", ""));
+    }
+    String::from_utf8(out.stdout).map_err(|_| "the reply is not text".to_string())
 }
 
 /// Open `url` in the default browser (links in terminals, web-only views).

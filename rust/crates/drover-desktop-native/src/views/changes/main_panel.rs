@@ -4,7 +4,8 @@
 use std::sync::Arc;
 
 use drover_proto::changes::{self, DiffRow, RowKind, Worktree};
-use gpui::{Context, Div, MouseButton, SharedString, div, prelude::*, px, rgb, uniform_list};
+use gpui::{Context, Div, MouseButton, SharedString, div, prelude::*, rgb, uniform_list};
+use crate::ui_scale::px;
 use serde_json::json;
 
 use crate::theme::{self, accent, dim, done, error, fg, muted, yellow, tint};

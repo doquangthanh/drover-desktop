@@ -1,7 +1,8 @@
 //! Settings → Rules tester (port of `rule-tester.tsx`): runs the detection rules against the live screen of a pane
 //! (`rules.test`, read-only) and shows which rule matched and the resulting state.
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use crate::ui_scale::px;
 use serde_json::{Value, json};
 
 use crate::theme::{self, blocked, dim, done, fg, muted, working};

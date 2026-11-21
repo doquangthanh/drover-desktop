@@ -6,7 +6,8 @@ use std::collections::{HashMap, HashSet};
 
 use drover_proto::agent_tree::{self, AgentMessage};
 use drover_proto::wire::Pane;
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, px, relative, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, relative, rgb};
+use crate::ui_scale::px;
 
 use super::Tab;
 use super::flow_logic::{self, SUB_KIND, SubLane, state_text, with_sub_lanes};
