@@ -18,6 +18,10 @@ use crate::{layout_view, sidebar, theme, topbar, views};
 pub type Screens = Arc<Mutex<HashMap<String, PaneScreen>>>;
 const HISTORY: usize = 5000;
 
+/// Which kind of thing was picked last; F2 renames it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Area { Pane, Tab, Space }
+
 pub struct DroverApp {
     pub client: Client,
     pub store: Store,
@@ -84,6 +88,20 @@ pub struct DroverApp {
     /// Give the keys back to the terminals on the next frame (a tab or pane was shown, a pop-up closed). Only then:
     /// a field in a panel keeps its focus while you type.
     pub want_term_focus: bool,
+    /// What was picked last (a space in the sidebar, a tab, a pane): F2 renames that.
+    pub area: Area,
+    /// The right-click menu that is open (context_menu.rs).
+    pub menu: Option<crate::context_menu::Menu>,
+    /// Keyboard selection over the focused pane (copy_mode.rs).
+    pub copy_mode: Option<crate::copy_mode::CopyMode>,
+    /// Your shortcuts from keys.toml (keymap.rs), and whether they were asked for yet.
+    pub keymap: crate::keymap::Keymap,
+    pub keymap_loaded: bool,
+    /// Kitty graphics per pane (kitty_graphics.rs), and the size of a terminal cell in pixels as last painted.
+    pub graphics: Arc<Mutex<HashMap<String, crate::kitty_graphics::Graphics>>>,
+    pub cell_size: (f32, f32),
+    /// Plugins found in the plugins folder (plugins.rs, plugin_actions.rs).
+    pub plugins: Vec<crate::plugins::Plugin>,
     /// In-app toasts (toasts.rs) and whether this window is the active one (set while painting).
     pub toasts: crate::toasts::Toasts,
     /// Replies of fire-and-forget requests: only their errors matter (toasts).
@@ -154,7 +172,7 @@ impl DroverApp {
                     settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
-                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true,
+                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
                     toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 
@@ -200,7 +218,9 @@ impl DroverApp {
     fn feed(&mut self, pane: &str, data: &str, replay: bool) {
         let Some(p) = self.store.pane(pane) else { return };
         let mut screens = self.screens.lock().unwrap();
+        let mut graphics = self.graphics.lock().unwrap();
         if replay || !screens.contains_key(pane) {
+            graphics.remove(pane); // a replay draws its images again
             // Prefer the size this window measured and sent (pane.resize): the store can still hold the size the pane
             // was created at (120x32), and output written for more rows would scroll blank lines into history, which
             // the next grow pulls back on screen, pushing the content down.
@@ -208,7 +228,11 @@ impl DroverApp {
             screens.insert(pane.to_string(), PaneScreen::new(cols.max(2) as usize, rows.max(2) as usize, HISTORY));
         }
         if let Some(s) = screens.get_mut(pane) {
-            s.feed(data.as_bytes());
+            let replies = graphics.entry(pane.to_string()).or_default().feed(s, data, self.cell_size);
+            // Answers go back to the program, except while replaying old output (the question is long past).
+            for data in replies.into_iter().filter(|_| !replay) {
+                let _ = self.client.commands.send(Command::Input { pane: pane.to_string(), data });
+            }
         }
         if replay && let Some(t) = self.last_switch {
             eprintln!("trace: replay of {pane} ({} KB) fed {:.1} ms after click", data.len() / 1024, t.elapsed().as_secs_f64() * 1000.0);
@@ -323,6 +347,7 @@ impl DroverApp {
         self.mark_switch();
         self.view = View::Terminals;
         self.want_term_focus = true;
+        self.area = Area::Space;
         self.space = Some(id);
         self.tab = None;
         self.keep_selection_valid();
@@ -337,6 +362,7 @@ impl DroverApp {
         self.mark_switch();
         self.view = View::Terminals;
         self.want_term_focus = true;
+        self.area = Area::Tab;
         self.settled.remove(&id); // showing a settled tab brings it back
         self.tab = Some(id);
         self.keep_selection_valid();
@@ -350,6 +376,7 @@ impl DroverApp {
             self.rpc("pane.focus", serde_json::json!({"pane": pane}));
         }
         self.focused = Some(pane);
+        self.area = Area::Pane;
         window.focus(&self.term_focus);
         cx.notify();
     }
@@ -358,7 +385,9 @@ impl DroverApp {
 impl Render for DroverApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.window_active = window.is_window_active();
-        self.code_family = crate::terminal_paint::resolved(&self.term_font, window).font.family;
+        let resolved = crate::terminal_paint::resolved(&self.term_font, window);
+        self.cell_size = (f32::from(crate::terminal_paint::cell_width(&resolved, window)), resolved.line_height);
+        self.code_family = resolved.font.family;
         // Terminals shown, or a question open: keys belong to the app, not to a view's field (e.g. after a tab
         // click left a view, or a close was asked from the sidebar while a field had focus).
         if (self.confirm.is_some() || (self.want_term_focus && self.view == View::Terminals)) && self.picker.is_none() {
@@ -389,7 +418,14 @@ impl Render for DroverApp {
             } else {
                 views::body(self, cx)
             });
+        if self.connected && !self.keymap_loaded {
+            self.keymap_loaded = true;
+            self.load_keymap(false);
+            self.reload_plugins(false);
+        }
+        let view_size = window.viewport_size();
         let overlay = crate::dialogs::confirm_overlay(self, cx).or_else(|| crate::picker::overlay(self, cx))
+            .or_else(|| crate::context_menu::overlay(self, view_size, cx))
             .or_else(|| crate::dialogs::shortcuts_overlay(self, cx));
         div()
             .relative()

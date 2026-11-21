@@ -21,7 +21,7 @@ pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     if let Some(space) = app.space.as_deref() {
         for t in app.store.tabs_of(space).filter(|t| !app.settled.contains(&t.id)) {
             let on = app.view == View::Terminals && app.tab.as_deref() == Some(t.id.as_str());
-            let (id, close_id) = (t.id.clone(), t.id.clone());
+            let (id, close_id, menu_id) = (t.id.clone(), t.id.clone(), t.id.clone());
             // The tab shows its most urgent agent, else its first pane.
             let lead = app.store.panes.iter().filter(|p| p.tab_id == t.id)
                 .max_by_key(|p| (p.kind != "shell", drover_proto::store::urgency(&p.state)));
@@ -36,7 +36,12 @@ pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
                     .child(state_mark(&state, exit, gpui::SharedString::from(format!("tab-{}", t.id))))
                     .when(on, |d| d.child(div().rounded(px(4.)).hover(|d| d.bg(theme::hover())).child(icon("close", 12., dim()))
                         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_tab(&close_id, cx); }))))
-                    .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.select_tab(id.clone(), cx))),
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, window, cx| {
+                        if ev.click_count >= 2 { app.open_rename_tab(Some(id.clone()), window, cx); } else { app.select_tab(id.clone(), cx); }
+                    }))
+                    .on_mouse_down(MouseButton::Right, cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| {
+                        app.open_menu(ev.position, crate::context_menu::tab_items(&menu_id), cx);
+                    })),
             );
         }
         let away = app.store.tabs_of(space).filter(|t| app.settled.contains(&t.id)).count();
@@ -82,6 +87,7 @@ pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         bar = bar.child(div().min_w_0().truncate().child(short_path(&p.cwd)));
     }
     bar.child(div().flex_1())
+        .when(app.copy_mode.is_some(), |d| d.child(div().text_color(rgb(accent())).child("COPY MODE · hjkl move · w b e · v V select · y copy · Esc exit")))
         .when(app.chord, |d| d.child(div().text_color(rgb(accent())).child("Ctrl+K… waiting for the second key")))
         .child(div().flex().items_center().gap(px(5.)).child(key_cap("Ctrl+K")).child(key_cap("Ctrl+S"))
             .child(div().text_color(rgb(dim())).child("shortcuts"))

@@ -1468,11 +1468,15 @@ name = "drover-desktop-native"
 version = "0.2.7"
 dependencies = [
  "alacritty_terminal",
+ "base64",
  "drover-core",
  "drover-proto",
  "embed-resource",
+ "flate2",
  "gpui",
+ "image",
  "serde_json",
+ "toml 0.8.23",
 ]
 
 [[package]]

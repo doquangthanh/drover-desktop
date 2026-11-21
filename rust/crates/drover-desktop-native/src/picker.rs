@@ -16,16 +16,20 @@ pub enum Kind {
     Jump,
     Commands,
     Rename,
+    RenameSpace,
+    RenameTab,
+    RenameMachine,
+    InstallPlugin,
     Find,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cmd {
     NewTab, CloseTab, NextTab, PrevTab, SplitRight, SplitDown, ClosePane, Zoom, Sidebar,
-    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Jump, Rename, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll, AppZoomIn, AppZoomOut, AppZoomReset, WhatsNew, Feedback,
+    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Palette, ReloadConfig, PluginsReload, PluginsFolder, PluginInstall, Jump, Rename, RenameSpace, RenameTab, CopyMode, ClearPane, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll, AppZoomIn, AppZoomOut, AppZoomReset, WhatsNew, Feedback,
 }
 
-const COMMANDS: [(&str, &str, Cmd); 32] = [
+const COMMANDS: [(&str, &str, Cmd); 40] = [
     ("New tab", "Ctrl+N", Cmd::NewTab), ("Close tab", "Ctrl+W", Cmd::CloseTab), ("Next tab", "Ctrl+Tab", Cmd::NextTab),
     ("Previous tab", "Ctrl+Shift+Tab", Cmd::PrevTab), ("Split right", "Ctrl+\\", Cmd::SplitRight),
     ("Split down", "Ctrl+K Ctrl+\\", Cmd::SplitDown), ("Close pane", "Ctrl+K W", Cmd::ClosePane), ("Zoom pane", "Ctrl+K Ctrl+M", Cmd::Zoom),
@@ -33,6 +37,8 @@ const COMMANDS: [(&str, &str, Cmd); 32] = [
     ("Changes panel", "Ctrl+Shift+G", Cmd::Changes), ("Inbox", "Ctrl+Shift+I", Cmd::Inbox), ("Machines", "Ctrl+Shift+M", Cmd::Machines),
     ("Settings", "Ctrl+,", Cmd::Settings), ("Next agent that needs you", "F8", Cmd::NextBlocked), ("Next finished agent", "Shift+F8", Cmd::NextDone),
     ("Keyboard shortcuts", "Ctrl+K Ctrl+S", Cmd::Shortcuts), ("Jump to a terminal", "Ctrl+P", Cmd::Jump), ("Rename agent", "F2", Cmd::Rename),
+    ("Rename space", "F2 after picking a space", Cmd::RenameSpace), ("Rename tab", "F2 after picking a tab", Cmd::RenameTab),
+    ("Copy mode (select with the keyboard)", "Ctrl+K [", Cmd::CopyMode), ("Clear screen and scrollback", "", Cmd::ClearPane),
     ("Find in terminal", "Ctrl+F", Cmd::Find), ("Put this tab away (settle)", "", Cmd::SettleTab),
     ("Bring back settled tabs", "", Cmd::UnsettleTabs), ("Terminal text bigger", "Ctrl+=", Cmd::ZoomIn),
     ("Terminal text smaller", "Ctrl+-", Cmd::ZoomOut), ("Terminal text normal size", "Ctrl+0", Cmd::ZoomReset),
@@ -40,6 +46,8 @@ const COMMANDS: [(&str, &str, Cmd); 32] = [
     ("Interface bigger", "Ctrl+Alt+=", Cmd::AppZoomIn), ("Interface smaller", "Ctrl+Alt+-", Cmd::AppZoomOut),
     ("Interface normal size", "Ctrl+Alt+0", Cmd::AppZoomReset),
     ("What's new", "", Cmd::WhatsNew), ("Send feedback", "", Cmd::Feedback),
+    ("Reload config (your shortcuts in keys.toml)", "", Cmd::ReloadConfig), ("Plugins: reload", "", Cmd::PluginsReload),
+    ("Plugins: open the folder", "", Cmd::PluginsFolder), ("Plugins: install from GitHub", "", Cmd::PluginInstall),
 ];
 
 pub struct Picker {
@@ -49,6 +57,8 @@ pub struct Picker {
     /// Find: the pane searched and what the last match said.
     pub pane: Option<String>,
     pub note: Option<String>,
+    /// RenameSpace / RenameTab: the id being renamed.
+    pub target: Option<String>,
     /// The field's text, kept here for find.rs.
     pub query: String,
 }
@@ -57,9 +67,35 @@ pub struct Picker {
 enum Row {
     Pane(String),
     Cmd(Cmd),
+    /// A plugin action, by its "plugin.id.action" name.
+    Plugin(String),
 }
 
 impl DroverApp {
+    /// Rename the given tab (double-click on it), or the shown one.
+    pub fn open_rename_tab(&mut self, tab: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = tab.or_else(|| self.tab.clone()) else { return };
+        let Some(name) = self.store.tab(&id).map(|t| t.name.clone()) else { return };
+        self.open_picker_with(Kind::RenameTab, ("New name", name), Some(id), window, cx);
+    }
+
+    /// F2: rename what was picked last: the space, the tab, or the focused agent.
+    pub fn rename_picked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::workspace_app::Area;
+        match self.area {
+            Area::Space => self.open_rename_space(None, window, cx),
+            Area::Tab => self.open_rename_tab(None, window, cx),
+            Area::Pane => self.open_picker(Kind::Rename, window, cx),
+        }
+    }
+
+    /// Rename the given space (double-click in the sidebar), or the current one.
+    pub fn open_rename_space(&mut self, space: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = space.or_else(|| self.space.clone()) else { return };
+        let Some(name) = self.store.spaces.iter().find(|s| s.id == id).map(|s| s.name.clone()) else { return };
+        self.open_picker_with(Kind::RenameSpace, ("New name", name), Some(id), window, cx);
+    }
+
     pub fn open_picker(&mut self, kind: Kind, window: &mut Window, cx: &mut Context<Self>) {
         let (placeholder, text) = match kind {
             Kind::Jump => ("Jump to a terminal or agent…", String::new()),
@@ -69,7 +105,14 @@ impl DroverApp {
                 let Some(p) = self.focused.as_deref().and_then(|id| self.store.pane(id)) else { return };
                 ("New name", p.name.clone())
             }
+            Kind::RenameSpace | Kind::RenameTab => return self.rename_picked(window, cx),
+            Kind::RenameMachine => return,
+            Kind::InstallPlugin => return self.open_plugin_install(window, cx),
         };
+        self.open_picker_with(kind, (placeholder, text), None, window, cx);
+    }
+
+    pub fn open_picker_with(&mut self, kind: Kind, (placeholder, text): (&'static str, String), target: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         let input = cx.new(|cx| { let mut i = TextInput::new(placeholder, cx); i.set_text(&text, cx); i });
         cx.subscribe_in(&input, window, |app, input, ev, window, cx| match ev {
             InputEvent::Submit => app.picker_enter(window, cx),
@@ -82,7 +125,7 @@ impl DroverApp {
             InputEvent::Cancel => {}
         }).detach();
         window.focus(&input.read(cx).focus_handle(cx));
-        self.picker = Some(Picker { kind, input, selected: 0, pane: self.focused.clone(), note: None, query: text });
+        self.picker = Some(Picker { kind, input, selected: 0, pane: self.focused.clone(), note: None, target, query: text });
         cx.notify();
     }
 
@@ -105,8 +148,10 @@ impl DroverApp {
                 (Row::Pane(x.id.clone()), x.name.clone(), format!("{space} · {}", crate::widgets::short_path(&x.cwd)))
             }).collect(),
             Kind::Commands => COMMANDS.iter().filter(|(l, _, _)| has(l.to_string()))
-                .map(|(l, k, c)| (Row::Cmd(*c), l.to_string(), k.to_string())).collect(),
-            Kind::Rename | Kind::Find => vec![],
+                .map(|(l, k, c)| (Row::Cmd(*c), l.to_string(), k.to_string()))
+                .chain(self.plugin_actions().into_iter().filter(|(_, l)| has(l.clone())).map(|(id, l)| (Row::Plugin(id), l, "plugin".to_string())))
+                .collect(),
+            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::InstallPlugin | Kind::Find => vec![],
         }
     }
 
@@ -121,6 +166,26 @@ impl DroverApp {
                 }
                 self.close_picker(cx);
             }
+            Kind::InstallPlugin => {
+                let input = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
+                self.close_picker(cx);
+                if !input.is_empty() { self.ask_install_plugin(&input, cx); }
+            }
+            Kind::RenameMachine => {
+                let name = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
+                if let (Some(old), false) = (self.picker.as_ref().and_then(|p| p.target.clone()), name.is_empty()) {
+                    self.rename_machine(old, name);
+                }
+                self.close_picker(cx);
+            }
+            Kind::RenameSpace | Kind::RenameTab => {
+                let name = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
+                if let (Some(id), false) = (self.picker.as_ref().and_then(|p| p.target.clone()), name.is_empty()) {
+                    if kind == Kind::RenameTab { self.rpc("tab.rename", json!({"tab": id, "name": name})); }
+                    else { self.rpc("space.rename", json!({"space": id, "name": name})); }
+                }
+                self.close_picker(cx);
+            }
             _ => {
                 let rows = self.picker_rows(cx);
                 let at = self.picker.as_ref().map(|p| p.selected).unwrap_or(0);
@@ -128,6 +193,7 @@ impl DroverApp {
                 match rows.into_iter().nth(at).map(|r| r.0) {
                     Some(Row::Pane(id)) => { self.show_pane(&id); window.focus(&self.term_focus); }
                     Some(Row::Cmd(c)) => self.run_cmd(c, window, cx),
+                    Some(Row::Plugin(id)) => self.run_plugin_action(&id),
                     None => {}
                 }
             }
@@ -173,6 +239,15 @@ impl DroverApp {
             Cmd::Shortcuts => self.show_shortcuts = true,
             Cmd::Jump => self.open_picker(Kind::Jump, window, cx),
             Cmd::Rename => self.open_picker(Kind::Rename, window, cx),
+            Cmd::RenameSpace => self.open_rename_space(None, window, cx),
+            Cmd::RenameTab => self.open_rename_tab(None, window, cx),
+            Cmd::CopyMode => self.enter_copy_mode(cx),
+            Cmd::Palette => self.open_picker(Kind::Commands, window, cx),
+            Cmd::PluginsReload => self.reload_plugins(true),
+            Cmd::PluginsFolder => self.open_plugins_folder(),
+            Cmd::PluginInstall => self.open_plugin_install(window, cx),
+            Cmd::ReloadConfig => { self.settings.files = None; self.load_keymap(true); }
+            Cmd::ClearPane => self.clear_focused_pane(),
             Cmd::Find => self.open_picker(Kind::Find, window, cx),
             Cmd::SettleTab => self.settle_current_tab(cx),
             Cmd::UnsettleTabs => self.unsettle_all(cx),
@@ -202,20 +277,20 @@ fn fold(s: &str) -> String {
 
 pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let p = app.picker.as_ref()?;
-    let title = match p.kind { Kind::Jump => "Jump to", Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::Find => "Find in terminal" };
+    let title = match p.kind { Kind::Jump => "Jump to", Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::InstallPlugin => "Install a plugin", Kind::Find => "Find in terminal" };
     let mut list = div().flex().flex_col().gap(px(1.)).max_h(px(420.)).overflow_hidden();
     for (i, (row, label, detail)) in app.picker_rows(cx).into_iter().take(14).enumerate() {
         let on = i == p.selected;
         let lead = match &row {
             Row::Pane(id) => app.store.pane(id).map(|x| div().flex().items_center().gap(px(6.)).child(kind_icon(&x.kind))
                 .child(state_mark(&x.state, x.exit_code, gpui::SharedString::from(format!("pk-{id}"))))),
-            Row::Cmd(_) => None,
+            Row::Cmd(_) | Row::Plugin(_) => None,
         };
         list = list.child(div().h(px(32.)).flex_none().flex().items_center().gap(px(10.)).px(px(10.)).rounded(px(7.))
             .when(on, |d| d.bg(theme::selected())).hover(|d| d.bg(theme::hover()))
             .children(lead)
             .child(div().flex_1().min_w_0().truncate().text_color(rgb(fg())).child(label))
-            .child(div().flex_none().text_size(px(11.5)).text_color(rgb(if matches!(row, Row::Cmd(_)) { accent() } else { dim() })).child(detail))
+            .child(div().flex_none().text_size(px(11.5)).text_color(rgb(if matches!(row, Row::Cmd(_) | Row::Plugin(_)) { accent() } else { dim() })).child(detail))
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| {
                 if let Some(p) = app.picker.as_mut() { p.selected = i; }
                 app.picker_enter(window, cx);

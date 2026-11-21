@@ -39,6 +39,19 @@ impl DroverApp {
             cx.stop_propagation();
             return;
         }
+        if self.menu.is_some() {
+            // A right-click menu is open: any key closes it, and Escape stops there.
+            self.close_menu(cx);
+            if ev.keystroke.key == "escape" {
+                cx.stop_propagation();
+                return;
+            }
+        }
+        if self.copy_mode.is_some() {
+            self.copy_key(ev, cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.show_shortcuts && ev.keystroke.key == "escape" {
             self.show_shortcuts = false;
             cx.stop_propagation();

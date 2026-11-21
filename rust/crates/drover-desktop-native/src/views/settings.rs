@@ -34,7 +34,7 @@ pub struct SettingsState {
 }
 
 /// Text of config file `name` from `settings.files`.
-fn file_text(data: &Value, name: &str) -> String {
+pub fn file_text(data: &Value, name: &str) -> String {
     data["files"].as_array().and_then(|f| f.iter().find(|f| f["name"] == name)).and_then(|f| f["text"].as_str()).unwrap_or("").to_string()
 }
 
@@ -63,8 +63,10 @@ impl DroverApp {
         let text = self.settings_editor.read(cx).text.clone();
         self.settings.note = Some("Saving…".into());
         let saved = text.clone();
+        let file = name.clone();
         self.rpc_reply("settings.write", json!({"name": name, "text": text}), move |app, r| match r {
             Ok(_) => {
+                if file == "keys.toml" { app.load_keymap(true); }
                 app.settings.note = Some("✓ Saved. Drover reloads it within 2 seconds.".into());
                 app.settings.editing = app.settings.editing.take().map(|(n, _)| (n, saved));
                 app.settings.files = None;

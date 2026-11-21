@@ -2,11 +2,19 @@
 
 mod actions;
 mod assets;
+mod context_menu;
+mod copy_mode;
 mod dialogs;
 mod drag;
 mod find;
 mod font_fallback;
 mod font_prefs;
+mod keymap;
+mod plugin_actions;
+mod plugins;
+mod kitty_command;
+mod kitty_graphics;
+mod machines_edit;
 mod keys;
 mod layout_view;
 mod picker;

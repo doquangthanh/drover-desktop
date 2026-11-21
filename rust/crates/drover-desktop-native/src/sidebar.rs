@@ -59,12 +59,17 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
             .hover(|d| d.bg(theme::hover()))
             .child(icon("close", 11., dim()))
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_space(&close_id, cx); }));
-        let middle_id = s.id.clone();
+        let (middle_id, menu_id) = (s.id.clone(), s.id.clone());
         spaces = spaces.child(srow(on).child(avatar(&s.name, s.color))
             .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(s.name.clone()))
             .child(git).when(on, |d| d.child(close))
-            .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.select_space(id.clone(), cx)))
-            .on_mouse_down(MouseButton::Middle, cx.listener(move |app, _, _, cx| app.ask_close_space(&middle_id, cx))));
+            .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, window, cx| {
+                if ev.click_count >= 2 { app.open_rename_space(Some(id.clone()), window, cx); } else { app.select_space(id.clone(), cx); }
+            }))
+            .on_mouse_down(MouseButton::Middle, cx.listener(move |app, _, _, cx| app.ask_close_space(&middle_id, cx)))
+            .on_mouse_down(MouseButton::Right, cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| {
+                app.open_menu(ev.position, crate::context_menu::space_items(&menu_id), cx);
+            })));
     }
 
     let mut agents = div().flex().flex_col().px(px(8.)).pb(px(10.));
@@ -76,7 +81,7 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         agents = agents.child(div().h(px(24.)).flex().items_center().px(px(8.)).text_size(px(11.)).text_color(rgb(dim())).child(s.name.clone()));
         for p in list {
             let on = app.focused.as_deref() == Some(p.id.as_str());
-            let pane_id = p.id.clone();
+            let (pane_id, menu_id) = (p.id.clone(), p.id.clone());
             agents = agents.child(srow(on).child(kind_icon(&p.kind))
                 .child(div().flex_1().min_w_0().truncate().when(p.state == "idle", |d| d.text_color(rgb(muted()))).child(p.name.clone()))
                 .child(div().flex_none().text_size(px(11.)).text_color(rgb(dim())).child(age(p.since)))
@@ -85,6 +90,9 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
                     app.show_pane(&pane_id);
                     window.focus(&app.term_focus);
                     cx.notify();
+                }))
+                .on_mouse_down(MouseButton::Right, cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| {
+                    app.open_menu(ev.position, crate::context_menu::pane_items(&menu_id, false), cx);
                 })));
         }
     }

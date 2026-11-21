@@ -114,6 +114,9 @@ impl DroverApp {
                 if state == "blocked" {
                     self.settled.remove(&pane.tab_id); // an agent that needs you brings its settled tab back
                 }
+                if !state.is_empty() {
+                    self.fire_plugin_event(state, &pane);
+                }
                 let (tone, title, action) = match state {
                     "blocked" => (Tone::Blocked, format!("{} needs you", pane.name), "Answer"),
                     "done" => (Tone::Done, format!("{} finished", pane.name), "Open"),
