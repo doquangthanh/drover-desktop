@@ -9,9 +9,12 @@ description = "Native desktop client of the drover daemon, drawn with GPUI"
 name = "drover-native"
 path = "src/main.rs"
 
+[build-dependencies]
+embed-resource = "3.0.12"  # Windows icon (build.rs); already in the lock through gpui
+
 [dependencies]
 gpui = "=0.2.2"
 alacritty_terminal = "=0.26.0"  # same pin as drover-core
 serde_json = "1.0.154"
-drover-core = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.2" }
-drover-proto = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.2" }
+drover-core = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.3" }
+drover-proto = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.3" }

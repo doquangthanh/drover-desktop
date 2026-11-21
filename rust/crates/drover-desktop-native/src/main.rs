@@ -32,7 +32,10 @@ fn main() {
     ui_scale::init();
     Application::new().with_assets(assets::Assets).run(|cx: &mut App| {
         assets::load_fonts(cx);
-        let bounds = Bounds::centered(None, size(px(1500.), px(900.)), cx);
+        // 1500x900, but never taller or wider than the screen allows: on a 1536x864 screen (1080p at 125 %) a
+        // centered 900 px window starts above the top edge and its title bar, with close/minimize/maximize, is lost.
+        let screen = cx.primary_display().map(|d| d.bounds().size).unwrap_or(size(px(1500.), px(900.)));
+        let bounds = Bounds::centered(None, size(px(1500.).min(screen.width * 0.95), px(900.).min(screen.height * 0.85)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
