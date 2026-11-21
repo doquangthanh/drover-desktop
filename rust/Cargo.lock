@@ -1451,8 +1451,8 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
 name = "drover-core"
-version = "0.2.0-dev"
-source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.0-dev#b663129a3d48f547e4aaacc610d978bb958ce232"
+version = "0.2.1-dev"
+source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.1-dev#4d556e347d8ea45d2106ea1fdf3b71f0ad833855"
 dependencies = [
  "alacritty_terminal",
  "portable-pty",
@@ -1465,7 +1465,7 @@ dependencies = [
 
 [[package]]
 name = "drover-desktop-native"
-version = "0.2.0-dev"
+version = "0.2.1-dev"
 dependencies = [
  "alacritty_terminal",
  "drover-core",
@@ -1476,8 +1476,8 @@ dependencies = [
 
 [[package]]
 name = "drover-proto"
-version = "0.2.0-dev"
-source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.0-dev#b663129a3d48f547e4aaacc610d978bb958ce232"
+version = "0.2.1-dev"
+source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.1-dev#4d556e347d8ea45d2106ea1fdf3b71f0ad833855"
 dependencies = [
  "dirs 7.0.0",
  "drover-core",
@@ -1630,7 +1630,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e35d6e78f4cebb90e51d543db8fe41528851d6deeef6ef21ebd4bfdc1e784776"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4164,7 +4164,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4576,7 +4576,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4589,7 +4589,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5514,7 +5514,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.6",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6419,7 +6419,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
