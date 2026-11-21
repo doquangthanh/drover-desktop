@@ -1470,6 +1470,7 @@ dependencies = [
  "alacritty_terminal",
  "drover-core",
  "drover-proto",
+ "embed-resource",
  "gpui",
  "serde_json",
 ]
