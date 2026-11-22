@@ -1452,7 +1452,7 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 [[package]]
 name = "drover-core"
 version = "0.2.2"
-source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.12#e16262d0b858ff95a4b0c7ce871217b598c2c480"
+source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.13#e16262d0b858ff95a4b0c7ce871217b598c2c480"
 dependencies = [
  "alacritty_terminal",
  "portable-pty",
@@ -1465,7 +1465,7 @@ dependencies = [
 
 [[package]]
 name = "drover-desktop-native"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "alacritty_terminal",
  "base64",
@@ -1482,7 +1482,7 @@ dependencies = [
 [[package]]
 name = "drover-proto"
 version = "0.2.2"
-source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.12#e16262d0b858ff95a4b0c7ce871217b598c2c480"
+source = "git+https://github.com/doquangthanh/drover-core?tag=v0.2.13#e16262d0b858ff95a4b0c7ce871217b598c2c480"
 dependencies = [
  "dirs 7.0.0",
  "drover-core",
@@ -1635,7 +1635,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e35d6e78f4cebb90e51d543db8fe41528851d6deeef6ef21ebd4bfdc1e784776"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4169,7 +4169,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4581,7 +4581,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4594,7 +4594,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5519,7 +5519,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.6",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
