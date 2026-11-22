@@ -14,6 +14,8 @@ use crate::workspace_app::DroverApp;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Jump,
+    /// Like Jump, but Enter peeks at the pane (peek.rs) instead of going there.
+    Peek,
     Commands,
     Rename,
     RenameSpace,
@@ -27,17 +29,17 @@ pub enum Kind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cmd {
     NewTab, CloseTab, NextTab, PrevTab, SplitRight, SplitDown, ClosePane, Zoom, Sidebar,
-    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Palette, ReloadConfig, PluginsReload, PluginsFolder, PluginInstall, Jump, Rename, RenameSpace, RenameTab, CopyMode, ClearPane, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll, AppZoomIn, AppZoomOut, AppZoomReset, WhatsNew, Feedback,
+    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Palette, ReloadConfig, PluginsReload, PluginsFolder, PluginInstall, Jump, Rename, RenameSpace, RenameTab, CopyMode, ClearPane, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll, AppZoomIn, AppZoomOut, AppZoomReset, WhatsNew, Feedback, Peek,
 }
 
-const COMMANDS: [(&str, &str, Cmd); 40] = [
+const COMMANDS: [(&str, &str, Cmd); 41] = [
     ("New tab", "Ctrl+N", Cmd::NewTab), ("Close tab", "Ctrl+W", Cmd::CloseTab), ("Next tab", "Ctrl+Tab", Cmd::NextTab),
     ("Previous tab", "Ctrl+Shift+Tab", Cmd::PrevTab), ("Split right", "Ctrl+\\", Cmd::SplitRight),
     ("Split down", "Ctrl+K Ctrl+\\", Cmd::SplitDown), ("Close pane", "Ctrl+K W", Cmd::ClosePane), ("Zoom pane", "Ctrl+K Ctrl+M", Cmd::Zoom),
     ("Toggle sidebar", "Ctrl+B", Cmd::Sidebar), ("Agents panel", "Ctrl+Shift+A", Cmd::Agents), ("Files panel", "Ctrl+Shift+E", Cmd::Files),
     ("Changes panel", "Ctrl+Shift+G", Cmd::Changes), ("Inbox", "Ctrl+Shift+I", Cmd::Inbox), ("Machines", "Ctrl+Shift+M", Cmd::Machines),
     ("Settings", "Ctrl+,", Cmd::Settings), ("Next agent that needs you", "F8", Cmd::NextBlocked), ("Next finished agent", "Shift+F8", Cmd::NextDone),
-    ("Keyboard shortcuts", "Ctrl+K Ctrl+S", Cmd::Shortcuts), ("Jump to a terminal", "Ctrl+P", Cmd::Jump), ("Rename agent", "F2", Cmd::Rename),
+    ("Keyboard shortcuts", "Ctrl+K Ctrl+S", Cmd::Shortcuts), ("Jump to a terminal", "Ctrl+P", Cmd::Jump), ("Peek at a terminal (stay where you are)", "Ctrl+K P", Cmd::Peek), ("Rename agent", "F2", Cmd::Rename),
     ("Rename space", "F2 after picking a space", Cmd::RenameSpace), ("Rename tab", "F2 after picking a tab", Cmd::RenameTab),
     ("Copy mode (select with the keyboard)", "Ctrl+K [", Cmd::CopyMode), ("Clear screen and scrollback", "", Cmd::ClearPane),
     ("Find in terminal", "Ctrl+F", Cmd::Find), ("Put this tab away (settle)", "", Cmd::SettleTab),
@@ -100,6 +102,7 @@ impl DroverApp {
     pub fn open_picker(&mut self, kind: Kind, window: &mut Window, cx: &mut Context<Self>) {
         let (placeholder, text) = match kind {
             Kind::Jump => ("Jump to a terminal or agent…", String::new()),
+            Kind::Peek => ("Peek at a terminal or agent…", String::new()),
             Kind::Commands => ("Type a command…", String::new()),
             Kind::Find => ("Find in this terminal (Enter: older match)", String::new()),
             Kind::Rename => {
@@ -142,7 +145,7 @@ impl DroverApp {
         let q = fold(p.input.read(cx).value().trim());
         let has = |hay: String| q.is_empty() || fold(&hay).contains(&q);
         match p.kind {
-            Kind::Jump => self.store.panes.iter().filter(|x| {
+            Kind::Jump | Kind::Peek => self.store.panes.iter().filter(|x| {
                 let space = self.store.spaces.iter().find(|s| s.id == x.space_id).map(|s| s.name.as_str()).unwrap_or("");
                 has(format!("{} {} {} {}", x.name, x.title, space, x.cwd))
             }).map(|x| {
@@ -198,6 +201,7 @@ impl DroverApp {
                 let at = self.picker.as_ref().map(|p| p.selected).unwrap_or(0);
                 self.close_picker(cx);
                 match rows.into_iter().nth(at).map(|r| r.0) {
+                    Some(Row::Pane(id)) if kind == Kind::Peek => self.open_peek(&id, window, cx),
                     Some(Row::Pane(id)) => { self.show_pane(&id); window.focus(&self.term_focus); }
                     Some(Row::Cmd(c)) => self.run_cmd(c, window, cx),
                     Some(Row::Plugin(id)) => self.run_plugin_action(&id),
@@ -245,6 +249,7 @@ impl DroverApp {
             Cmd::NextDone => self.next_with_state("done", window, cx),
             Cmd::Shortcuts => self.show_shortcuts = true,
             Cmd::Jump => self.open_picker(Kind::Jump, window, cx),
+            Cmd::Peek => self.open_picker(Kind::Peek, window, cx),
             Cmd::Rename => self.open_picker(Kind::Rename, window, cx),
             Cmd::RenameSpace => self.open_rename_space(None, window, cx),
             Cmd::RenameTab => self.open_rename_tab(None, window, cx),
@@ -284,7 +289,7 @@ fn fold(s: &str) -> String {
 
 pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let p = app.picker.as_ref()?;
-    let title = match p.kind { Kind::Jump => "Jump to", Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::Find => "Find in terminal" };
+    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::Find => "Find in terminal" };
     let mut list = div().flex().flex_col().gap(px(1.)).max_h(px(420.)).overflow_hidden();
     for (i, (row, label, detail)) in app.picker_rows(cx).into_iter().take(14).enumerate() {
         let on = i == p.selected;

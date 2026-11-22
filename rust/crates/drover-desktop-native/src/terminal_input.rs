@@ -39,6 +39,11 @@ impl DroverApp {
             cx.stop_propagation();
             return;
         }
+        if self.peek.is_some() {
+            self.peek_key(&ev.keystroke.key, window, cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.menu.is_some() {
             // A menu is open: a key that picks one of its items (the + menu's 1–9) runs it; any other key closes it,
             // and Escape stops there.
@@ -154,7 +159,7 @@ impl EntityInputHandler for DroverApp {
 
     fn replace_text_in_range(&mut self, _: Option<Range<usize>>, text: &str, _: &mut Window, cx: &mut Context<Self>) {
         self.marked = None;
-        if !text.is_empty() && self.confirm.is_none() && self.view == crate::views::View::Terminals {
+        if !text.is_empty() && self.confirm.is_none() && self.peek.is_none() && self.view == crate::views::View::Terminals {
             self.send_to_focused(text.to_string());
         }
         cx.notify();

@@ -20,8 +20,8 @@ use crate::picker::Cmd;
 use crate::toasts::{Target, Tone};
 use crate::workspace_app::DroverApp;
 
-pub const IDS: [(&str, Cmd); 38] = [
-    ("commands", Cmd::Palette), ("jump", Cmd::Jump), ("find", Cmd::Find), ("rename", Cmd::Rename), ("rename_space", Cmd::RenameSpace),
+pub const IDS: [(&str, Cmd); 39] = [
+    ("commands", Cmd::Palette), ("jump", Cmd::Jump), ("peek", Cmd::Peek), ("find", Cmd::Find), ("rename", Cmd::Rename), ("rename_space", Cmd::RenameSpace),
     ("rename_tab", Cmd::RenameTab), ("copy_mode", Cmd::CopyMode), ("clear_pane", Cmd::ClearPane), ("select_all", Cmd::SelectAll),
     ("new_tab", Cmd::NewTab), ("close_tab", Cmd::CloseTab), ("next_tab", Cmd::NextTab), ("previous_tab", Cmd::PrevTab),
     ("settle_tab", Cmd::SettleTab), ("unsettle_tabs", Cmd::UnsettleTabs), ("split_right", Cmd::SplitRight), ("split_down", Cmd::SplitDown),

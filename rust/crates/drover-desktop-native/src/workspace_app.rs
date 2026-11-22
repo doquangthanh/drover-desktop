@@ -85,6 +85,8 @@ pub struct DroverApp {
     pub chord: bool,
     pub show_shortcuts: bool,
     pub picker: Option<crate::picker::Picker>,
+    /// The pane shown in the peek pop-up (peek.rs): looked at, not focused.
+    pub peek: Option<String>,
     /// Give the keys back to the terminals on the next frame (a tab or pane was shown, a pop-up closed). Only then:
     /// a field in a panel keeps its focus while you type.
     pub want_term_focus: bool,
@@ -205,7 +207,7 @@ impl DroverApp {
                     settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
-                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
+                    chord: false, show_shortcuts: false, picker: None, peek: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
                     toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), folds: Default::default(), sidebar_scroll: [gpui::ScrollHandle::new(), gpui::ScrollHandle::new()], base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, mouse_click: None, copied_out: None, relaunch: false, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 
@@ -346,6 +348,9 @@ impl DroverApp {
     fn keep_selection_valid(&mut self) {
         let store = &self.store;
         self.panels.retain(|pane, _| store.pane(pane).is_some()); // a closed pane keeps no panel
+        if self.peek.as_ref().is_some_and(|p| store.pane(p).is_none()) {
+            self.peek = None; // the peeked pane closed
+        }
         let space_ok = self.space.as_ref().is_some_and(|s| self.store.spaces.iter().any(|x| &x.id == s));
         if !space_ok {
             self.space = self.store.spaces.first().map(|s| s.id.clone());
@@ -473,6 +478,7 @@ impl Render for DroverApp {
         let view_size = window.viewport_size();
         let overlay = crate::dialogs::confirm_overlay(self, cx).or_else(|| crate::picker::overlay(self, cx))
             .or_else(|| crate::context_menu::overlay(self, view_size, cx))
+            .or_else(|| crate::peek::overlay(self, view_size, cx))
             .or_else(|| crate::dialogs::shortcuts_overlay(self, cx))
             .or_else(|| crate::views::machines_add_dialog::overlay(self, cx));
         div()
