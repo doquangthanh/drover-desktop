@@ -22,11 +22,13 @@ pub enum Drag {
     Panel { x0: f32, w0: f32 },
     Sidebar { x0: f32, w0: f32 },
     Split { tab: String, path: String, dir: Dir, ratio: f64 },
+    /// A scrollbar thumb (scrollbar.rs): `which` indexes `sidebar_scroll`, grabbed at `y0` with the list at `off0`.
+    Scroll { which: usize, y0: f32, off0: f32 },
 }
 
 impl DroverApp {
     pub fn start_drag(&mut self, drag: Drag, cx: &mut Context<Self>) {
-        crate::actions::trace(&format!("drag start: {}", match &drag { Drag::Panel { .. } => "panel", Drag::Sidebar { .. } => "sidebar", Drag::Split { .. } => "split" }));
+        crate::actions::trace(&format!("drag start: {}", match &drag { Drag::Panel { .. } => "panel", Drag::Sidebar { .. } => "sidebar", Drag::Split { .. } => "split", Drag::Scroll { .. } => "scroll" }));
         self.drag = Some(drag);
         cx.stop_propagation();
         cx.notify();
@@ -38,6 +40,10 @@ impl DroverApp {
             None => return,
             Some(Drag::Panel { x0, w0 }) => self.panel_width = (*w0 + (*x0 - x) / crate::ui_scale::zoom()).clamp(PANEL.0, PANEL.1),
             Some(Drag::Sidebar { x0, w0 }) => self.sidebar_width = (*w0 + (x - *x0) / crate::ui_scale::zoom()).clamp(SIDEBAR.0, SIDEBAR.1),
+            Some(Drag::Scroll { which, y0, off0 }) => {
+                let handle = &self.sidebar_scroll[*which];
+                if let Some(off) = crate::scrollbar::dragged_offset(handle, *off0, y - *y0) { crate::scrollbar::scroll_to(handle, off) }
+            }
             Some(Drag::Split { tab, path, dir, ratio }) => {
                 let Some(b) = self.split_bounds.lock().unwrap().get(&format!("{tab}|{path}")).copied() else { return };
                 let (pos, start, len) = match dir {

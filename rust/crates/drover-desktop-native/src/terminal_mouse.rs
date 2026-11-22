@@ -49,8 +49,14 @@ impl DroverApp {
 
     /// Left button pressed: true when the program took it (Shift not held, tracking on).
     pub fn mouse_press(&mut self, pane: &str, pos: gpui::Point<Pixels>, mods: Modifiers, window: &Window, cx: &mut Context<Self>) -> bool {
-        if mods.shift || self.mouse_mode(pane).is_none() { return false }
+        let Some((drags, motion)) = self.mouse_mode(pane).filter(|_| !mods.shift) else { return false };
         let Some((col, row)) = self.screen_cell(pane, pos, window) else { return false };
+        if !drags && !motion {
+            // Clicks only (Claude Code asks for 1000 + 1006): a drag means nothing to the program, so the press starts
+            // a text selection; a click without a drag is sent on release (select_end via take_click).
+            self.mouse_click = Some((pane.to_string(), col, row));
+            return false;
+        }
         self.send_mouse(pane, sgr(button_code(Some(0), mods, false), col, row, false));
         self.mouse_reporting = Some(pane.to_string());
         self.mouse_last = Some((pane.to_string(), col, row));
@@ -68,6 +74,17 @@ impl DroverApp {
             self.send_mouse(pane, sgr(button_code(held.then_some(0), mods, true), col, row, false));
             self.mouse_last = Some((pane.to_string(), col, row));
         }
+        true
+    }
+
+    /// Release after a clicks-only press (see mouse_press): with nothing selected the press and release go to the
+    /// program as one click; true when they were sent.
+    pub fn take_click(&mut self, pane: &str, nothing_selected: bool, mods: Modifiers) -> bool {
+        let Some((_, col, row)) = self.mouse_click.take().filter(|c| c.0 == pane) else { return false };
+        if !nothing_selected { return false }
+        self.send_mouse(pane, sgr(button_code(Some(0), mods, false), col, row, false));
+        self.send_mouse(pane, sgr(button_code(Some(0), mods, false), col, row, true));
+        self.mouse_last = Some((pane.to_string(), col, row));
         true
     }
 

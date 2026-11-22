@@ -23,6 +23,8 @@ mod layout_view;
 mod picker;
 mod powerline;
 mod sidebar;
+mod sidebar_fold;
+mod scrollbar;
 mod terminal_input;
 mod terminal_mouse;
 mod terminal_paint;

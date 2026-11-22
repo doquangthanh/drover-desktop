@@ -74,7 +74,10 @@ impl DroverApp {
     pub fn select_end(&mut self, pane: &str, ev: &MouseUpEvent, window: &mut Window, cx: &mut Context<Self>) {
         if self.mouse_release(pane, ev.position, ev.modifiers, window) { cx.notify(); return }
         self.selecting = None;
-        if let Some(text) = self.selected_text(pane) {
+        let text = self.selected_text(pane);
+        if self.take_click(pane, text.is_none(), ev.modifiers) {
+            // A plain click in a program that tracks clicks (Claude Code): it went to the program.
+        } else if let Some(text) = text {
             cx.write_to_clipboard(ClipboardItem::new_string(text));
         } else if let Some((point, _)) = self.cell_at(pane, ev.position, window)
             && let Some(link) = self.link_at(pane, point)
