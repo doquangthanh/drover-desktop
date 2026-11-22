@@ -10,6 +10,7 @@ mod find;
 mod font_fallback;
 mod font_prefs;
 mod keymap;
+mod ssh_hosts;
 mod ui_config;
 mod plugin_actions;
 mod plugins;
