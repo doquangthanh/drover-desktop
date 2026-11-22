@@ -10,7 +10,7 @@ use crate::toasts::{Target, Tone};
 use crate::workspace_app::DroverApp;
 
 /// The same rule the daemon applies to a new alias.
-fn alias_ok(alias: &str) -> bool {
+pub(crate) fn alias_ok(alias: &str) -> bool {
     let mut chars = alias.chars();
     chars.next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
         && alias.len() <= 32
