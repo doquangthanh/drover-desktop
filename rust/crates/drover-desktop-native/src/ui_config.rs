@@ -5,6 +5,7 @@
 //! space_row = "avatar name branch dirty state"   # any of these, in any order
 //! agent_row = "icon name age state"
 //! window_title = "{agent} · {space} — Drover"     # {space} {tab} {agent} {state}
+//! scroll_lines = 4                              # lines per mouse wheel notch
 //! ```
 //!
 //! What is left out is not shown. Saving keys.toml, or the "Reload config" command, applies it.
@@ -20,12 +21,14 @@ pub struct UiConfig {
     pub space_row: Vec<SpaceCol>,
     pub agent_row: Vec<AgentCol>,
     pub window_title: String,
+    /// Lines one notch of the mouse wheel scrolls (fast turning goes further).
+    pub scroll_lines: f32,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
         use {AgentCol as A, SpaceCol as S};
-        Self { space_row: vec![S::Avatar, S::Name, S::Branch, S::Dirty, S::State], agent_row: vec![A::Icon, A::Name, A::Age, A::State], window_title: "Drover".into() }
+        Self { space_row: vec![S::Avatar, S::Name, S::Branch, S::Dirty, S::State], agent_row: vec![A::Icon, A::Name, A::Age, A::State], window_title: "Drover".into(), scroll_lines: 4.0 }
     }
 }
 
@@ -51,12 +54,17 @@ pub fn parse(text: &str) -> (UiConfig, Vec<String>) {
             continue;
         }
         let (true, Some((key, value))) = (inside, line.split_once('=')) else { continue };
+        let raw = value.trim().trim_matches('"').to_string();
         let value = value.split('"').nth(1).unwrap_or("");
         match key.trim() {
             "space_row" => ui.space_row = words("space_row", value, &[("avatar", S::Avatar), ("name", S::Name), ("branch", S::Branch), ("dirty", S::Dirty), ("state", S::State)], &mut problems),
             "agent_row" => ui.agent_row = words("agent_row", value, &[("icon", A::Icon), ("name", A::Name), ("age", A::Age), ("state", A::State)], &mut problems),
+            "scroll_lines" => match raw.parse::<f32>() {
+                Ok(n) if (0.5..=50.0).contains(&n) => ui.scroll_lines = n,
+                _ => problems.push("keys.toml: scroll_lines is a number from 0.5 to 50".into()),
+            },
             "window_title" if !value.trim().is_empty() => ui.window_title = value.to_string(),
-            other => problems.push(format!("keys.toml: [desktop_ui] has no \"{other}\" (use space_row, agent_row, window_title)")),
+            other => problems.push(format!("keys.toml: [desktop_ui] has no \"{other}\" (use space_row, agent_row, window_title, scroll_lines)")),
         }
     }
     (ui, problems)

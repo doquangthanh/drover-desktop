@@ -159,3 +159,40 @@ impl EntityInputHandler for DroverApp {
         None
     }
 }
+
+const WHEEL_MAX_STREAK: u32 = 8;
+
+/// 1x for a slow wheel, up to about 3.4x when notches come in quick succession.
+fn wheel_boost(streak: u32) -> f32 {
+    1.0 + streak as f32 * 0.3
+}
+
+/// The whole lines in `rest + lines` (towards zero), and what is left over.
+fn whole_lines(rest: f32, lines: f32) -> (i32, f32) {
+    let total = rest + lines;
+    let n = total.trunc();
+    (n as i32, total - n)
+}
+
+#[cfg(test)]
+mod wheel_tests {
+    use super::*;
+
+    #[test]
+    fn small_moves_add_up_instead_of_vanishing() {
+        let (mut rest, mut scrolled) = (0.0, 0);
+        for _ in 0..10 {
+            let (n, r) = whole_lines(rest, 0.3);
+            rest = r;
+            scrolled += n;
+        }
+        assert_eq!(scrolled, 3);
+        assert_eq!(whole_lines(0.0, -2.6).0, -2);
+    }
+
+    #[test]
+    fn quick_turning_goes_further() {
+        assert_eq!(wheel_boost(0), 1.0);
+        assert!(wheel_boost(WHEEL_MAX_STREAK) > 3.0);
+    }
+}
