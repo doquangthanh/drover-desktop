@@ -35,6 +35,14 @@ jobs:
         working-directory: rust
       - run: cargo build --release --locked -p drover-desktop-native
         working-directory: rust
+        env:
+          # Windows: link the C runtime in. drover-native.exe sits at the bundle root, which can't see
+          # _internal\VCRUNTIME140.dll, so on a PC without the VC++ Redistributable it would not start.
+          RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
+      - name: "Windows: no VCRUNTIME140.dll import"
+        if: runner.os == 'Windows'
+        shell: bash
+        run: "! grep -qai 'vcruntime140' rust/target/release/${{ matrix.bin }} || { echo 'drover-native.exe still needs VCRUNTIME140.dll' >&2; exit 1; }"
       - name: Package
         shell: bash
         run: |
