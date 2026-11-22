@@ -27,6 +27,47 @@ fn srow(on: bool) -> Div {
         .when(on, |d| d.bg(theme::selected())).when(!on, |d| d.hover(|d| d.bg(theme::hover())))
 }
 
+/// The heading over one machine's spaces: icon, name, an optional button, and a connected / not dot.
+fn group_head(icon_name: &str, label: String, ok: bool, extra: Option<Div>) -> Div {
+    div().h(px(26.)).flex().items_center().gap(px(7.)).px(px(8.)).text_size(px(11.)).text_color(rgb(dim()))
+        .child(icon(icon_name, 13., dim())).child(div().flex_1().min_w_0().truncate().child(label))
+        .children(extra)
+        .child(div().size(px(6.)).flex_none().rounded_full().bg(rgb(if ok { done() } else { theme::error() })))
+}
+
+/// One space row: the columns the user asked for (ui_config.rs) in their order; click selects, double click renames,
+/// middle click / × closes, right click opens the menu.
+fn space_row(app: &DroverApp, s: &drover_proto::wire::Space, cx: &mut Context<DroverApp>) -> Div {
+    let on = app.space.as_deref() == Some(s.id.as_str());
+    let (id, close_id, middle_id, menu_id) = (s.id.clone(), s.id.clone(), s.id.clone(), s.id.clone());
+    let state = app.store.space_state(&s.id).to_string();
+    let small = || div().flex_none().text_size(px(11.5)).text_color(rgb(dim()));
+    // Shown on the selected row only, so other rows keep their width for the name (middle click closes any).
+    let close = div().size(px(18.)).flex_none().rounded(px(5.)).flex().items_center().justify_center()
+        .hover(|d| d.bg(theme::hover()))
+        .child(icon("close", 11., dim()))
+        .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_space(&close_id, cx); }));
+    let mut row = srow(on);
+    for col in &app.ui.space_row {
+        row = match col {
+            SpaceCol::Avatar => row.child(avatar(&s.name, s.color)),
+            SpaceCol::Name => row.child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(s.name.clone())),
+            SpaceCol::Branch => row.children(s.branch.as_ref().map(|b| small().max_w(px(130.)).truncate().child(b.clone()))),
+            SpaceCol::Dirty => row.when(s.dirty.unwrap_or(0) > 0, |d| d.child(div().size(px(5.)).flex_none().rounded_full().bg(rgb(theme::yellow())))),
+            SpaceCol::State => row.when(matches!(state.as_str(), "working" | "blocked"),
+                |d| d.child(small().child(state_mark(&state, None, gpui::SharedString::from(format!("sp-{}", s.id)))))),
+        };
+    }
+    row.when(on, |d| d.child(close))
+        .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, window, cx| {
+            if ev.click_count >= 2 { app.open_rename_space(Some(id.clone()), window, cx); } else { app.select_space(id.clone(), cx); }
+        }))
+        .on_mouse_down(MouseButton::Middle, cx.listener(move |app, _, _, cx| app.ask_close_space(&middle_id, cx)))
+        .on_mouse_down(MouseButton::Right, cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| {
+            app.open_menu(ev.position, crate::context_menu::space_items(&menu_id), cx);
+        }))
+}
+
 pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let logo = Arc::new(Image::from_bytes(ImageFormat::Png, crate::assets::LOGO.to_vec()));
     let brand = div().h(px(46.)).flex_none().flex().items_center().gap(px(8.)).pl(px(14.)).pr(px(10.))
@@ -35,43 +76,20 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .child(ibtn("search").on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, _| app.open_web(""))))
         .child(ibtn("sidebar").on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.sidebar_open = false; cx.notify(); })));
 
-    let mut spaces = div().flex().flex_col().px(px(8.)).pb(px(10.));
-    spaces = spaces.child(div().h(px(26.)).flex().items_center().gap(px(7.)).px(px(8.)).text_size(px(11.)).text_color(rgb(dim()))
-        .child(icon("monitor", 13., dim())).child(div().flex_1().child("This computer"))
-        .child(div().on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_space(cx))).child(icon("plus", 13., dim())))
-        .child(div().size(px(6.)).rounded_full().bg(rgb(if app.connected { done() } else { theme::error() })))
-    );
-    for s in &app.store.spaces {
-        let on = app.space.as_deref() == Some(s.id.as_str());
-        let (id, close_id) = (s.id.clone(), s.id.clone());
-        let state = app.store.space_state(&s.id).to_string();
-        let small = || div().flex_none().text_size(px(11.5)).text_color(rgb(dim()));
-        // Shown on the selected row only, so other rows keep their width for the name (middle click closes any).
-        let close = div().size(px(18.)).flex_none().rounded(px(5.)).flex().items_center().justify_center()
-            .hover(|d| d.bg(theme::hover()))
-            .child(icon("close", 11., dim()))
-            .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_space(&close_id, cx); }));
-        let (middle_id, menu_id) = (s.id.clone(), s.id.clone());
-        // The columns the user asked for (ui_config.rs), in their order.
-        let mut row = srow(on);
-        for col in &app.ui.space_row {
-            row = match col {
-                SpaceCol::Avatar => row.child(avatar(&s.name, s.color)),
-                SpaceCol::Name => row.child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(s.name.clone())),
-                SpaceCol::Branch => row.children(s.branch.as_ref().map(|b| small().max_w(px(130.)).truncate().child(b.clone()))),
-                SpaceCol::Dirty => row.when(s.dirty.unwrap_or(0) > 0, |d| d.child(div().size(px(5.)).flex_none().rounded_full().bg(rgb(theme::yellow())))),
-                SpaceCol::State => row.when(matches!(state.as_str(), "working" | "blocked"),
-                    |d| d.child(small().child(state_mark(&state, None, gpui::SharedString::from(format!("sp-{}", s.id)))))),
-            };
+    // This computer first, then every machine with the spaces its snapshot carries (as `shell/sidebar.tsx`).
+    let plus = div().on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_space(cx))).child(icon("plus", 13., dim()));
+    let mut spaces = div().flex().flex_col().px(px(8.)).pb(px(10.))
+        .child(group_head("monitor", "This computer".into(), app.connected, Some(plus)));
+    for s in app.store.spaces.iter().filter(|s| s.machine.as_deref().is_none_or(|m| m.is_empty() || m == "local")) {
+        spaces = spaces.child(space_row(app, s, cx));
+    }
+    for m in app.store.machines.as_array().into_iter().flatten() {
+        let (alias, status) = (m["alias"].as_str().unwrap_or("?"), m["status"].as_str().unwrap_or(""));
+        let label = if status == "connected" { alias.to_string() } else { format!("{alias} · {status}") };
+        spaces = spaces.child(group_head("server", label, status == "connected", None));
+        for s in app.store.spaces.iter().filter(|s| s.machine.as_deref() == Some(alias)) {
+            spaces = spaces.child(space_row(app, s, cx));
         }
-        spaces = spaces.child(row.when(on, |d| d.child(close))
-            .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, window, cx| {
-                if ev.click_count >= 2 { app.open_rename_space(Some(id.clone()), window, cx); } else { app.select_space(id.clone(), cx); }
-            }))
-            .on_mouse_down(MouseButton::Middle, cx.listener(move |app, _, _, cx| app.ask_close_space(&middle_id, cx)))
-            .on_mouse_down(MouseButton::Right, cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| {
-                app.open_menu(ev.position, crate::context_menu::space_items(&menu_id), cx);
-            })));
     }
 
     let mut agents = div().flex().flex_col().px(px(8.)).pb(px(10.));
