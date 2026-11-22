@@ -47,7 +47,7 @@ pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         let away = app.store.tabs_of(space).filter(|t| app.settled.contains(&t.id)).count();
         bar = bar.child(div().size(px(26.)).flex().items_center().justify_center().rounded(px(6.))
             .hover(|d| d.bg(theme::hover())).child(icon("plus", 14., dim()))
-            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_tab(cx))))
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, ev: &gpui::MouseDownEvent, _, _| app.open_new_menu(ev.position))))
             .when(away > 0, |d| d.child(div().h(px(22.)).px(px(8.)).rounded(px(6.)).flex().items_center().text_size(px(11.5)).text_color(rgb(dim()))
                 .hover(|d| d.bg(theme::hover()).text_color(rgb(fg()))).child(format!("{away} put away"))
                 .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.unsettle_all(cx)))));
@@ -73,7 +73,7 @@ pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .child(div().flex().items_center().gap(px(6.))
             .child(div().size(px(6.)).rounded_full().bg(rgb(if app.connected { done() } else { error() })))
             .child(app.status.clone()))
-        .child(format!("This computer · {} spaces · {} agents", app.store.spaces.len(), app.store.panes.len()))
+        .child(format!("This computer · {}", app.local_summary()))
         .when(blocked > 0, |d| d.child(div().text_color(rgb(crate::theme::blocked())).child(format!("{blocked} need you"))));
     if let Some(branch) = space.and_then(|s| s.branch.clone()) {
         let dirty = space.and_then(|s| s.dirty).unwrap_or(0);

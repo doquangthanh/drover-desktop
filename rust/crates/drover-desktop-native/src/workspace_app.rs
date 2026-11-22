@@ -440,7 +440,8 @@ impl Render for DroverApp {
         let view_size = window.viewport_size();
         let overlay = crate::dialogs::confirm_overlay(self, cx).or_else(|| crate::picker::overlay(self, cx))
             .or_else(|| crate::context_menu::overlay(self, view_size, cx))
-            .or_else(|| crate::dialogs::shortcuts_overlay(self, cx));
+            .or_else(|| crate::dialogs::shortcuts_overlay(self, cx))
+            .or_else(|| crate::views::machines_add_dialog::overlay(self, cx));
         div()
             .relative()
             .flex()

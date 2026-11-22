@@ -8,6 +8,7 @@ pub mod feedback;
 pub mod files;
 pub mod inbox;
 pub mod machines;
+pub mod machines_add_dialog;
 pub mod panel;
 pub mod settings;
 pub mod settings_alerts;

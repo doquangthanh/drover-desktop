@@ -17,6 +17,7 @@ mod plugins;
 mod kitty_command;
 mod kitty_graphics;
 mod machines_edit;
+mod new_pane_menu;
 mod keys;
 mod layout_view;
 mod picker;

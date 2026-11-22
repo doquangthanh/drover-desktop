@@ -40,7 +40,12 @@ impl DroverApp {
             return;
         }
         if self.menu.is_some() {
-            // A right-click menu is open: any key closes it, and Escape stops there.
+            // A menu is open: a key that picks one of its items (the + menu's 1–9) runs it; any other key closes it,
+            // and Escape stops there.
+            if !ev.keystroke.modifiers.modified() && self.menu_key(&ev.keystroke.key, window, cx) {
+                cx.stop_propagation();
+                return;
+            }
             self.close_menu(cx);
             if ev.keystroke.key == "escape" {
                 cx.stop_propagation();
@@ -49,6 +54,12 @@ impl DroverApp {
         }
         if self.copy_mode.is_some() {
             self.copy_key(ev, cx);
+            cx.stop_propagation();
+            return;
+        }
+        if self.machines_form.open && self.view == crate::views::View::Machines && ev.keystroke.key == "escape" {
+            // Escape closes the Add a machine dialog, not the Machines view under it.
+            self.close_add_machine(cx);
             cx.stop_propagation();
             return;
         }
