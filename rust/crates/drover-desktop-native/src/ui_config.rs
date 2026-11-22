@@ -47,7 +47,7 @@ fn words<T: Copy>(key: &str, value: &str, names: &[(&str, T)], problems: &mut Ve
 /// The `[desktop_ui]` table of keys.toml text, and a line for each thing that could not be used.
 pub fn parse(text: &str) -> (UiConfig, Vec<String>) {
     use {AgentCol as A, SpaceCol as S};
-    let (mut ui, mut problems, mut inside) = (UiConfig::default(), vec![], false);
+    let (mut ui, mut problems, mut inside) = (UiConfig::default(), vec![], true); // lines before the first [section] count too: a bare `scroll_lines = 2` works
     for line in text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
         if let Some(section) = line.strip_prefix('[') {
             inside = section.trim_end_matches(']').trim() == "desktop_ui";
@@ -103,5 +103,18 @@ mod tests {
         assert_eq!(title("{agent} · {space}", "api", "main", "claude", "working"), "claude · api");
         assert_eq!(title("{agent} · {space}", "api", "main", "", "idle"), "api");
         assert_eq!(title("{agent}", "", "", "", ""), "Drover");
+    }
+}
+
+#[cfg(test)]
+mod bare_tests {
+    use super::*;
+
+    #[test]
+    fn a_line_outside_any_table_still_counts() {
+        assert_eq!(parse("scroll_lines = 1").0.scroll_lines, 1.0);
+        assert_eq!(parse("scroll_lines = 2\n[desktop_keys]\nnew_tab = \"f5\"\n").0.scroll_lines, 2.0);
+        // ...but not lines that belong to another table.
+        assert_eq!(parse("[keys]\nscroll_lines = 9\n").0.scroll_lines, 3.0);
     }
 }
