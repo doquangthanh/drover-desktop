@@ -19,7 +19,8 @@ fn entries(kinds: &[Value]) -> Vec<Entry> {
     }
     let mut number = 0;
     for k in kinds {
-        let (kind, installed) = (k["kind"].as_str().unwrap_or(""), k["installed"] == true);
+        // `installed` missing (a machine that could not check, see open_new_menu): offered, as if installed.
+        let (kind, installed) = (k["kind"].as_str().unwrap_or(""), k["installed"] != false);
         let label = k["label"].as_str().unwrap_or(kind).to_string();
         let key = installed.then(|| { number += 1; number }).filter(|n| *n <= 9).map(|n| n.to_string());
         let hint = if installed { key.clone().unwrap_or_default() } else { "not installed".into() };
@@ -56,16 +57,28 @@ impl DroverApp {
         self.rpc_then("pane.create", params, Self::focus_created);
     }
 
-    /// Open the + menu at `at`, once the space's machine said which agents it has.
+    /// Open the + menu at `at`, once the space's machine said which agents it has. A remote machine on an older dr
+    /// (no `agent.kinds`) cannot say: then this computer's `[agents]` are offered without the installed check.
     pub fn open_new_menu(&mut self, at: Point<Pixels>) {
-        let params = match self.space_target().and_then(|t| t.1) {
-            Some(m) => json!({"machine": m}),
-            None => json!({}),
+        let Some(machine) = self.space_target().and_then(|t| t.1) else {
+            return self.rpc_reply("agent.kinds", json!({}), move |app, r| app.show_new_menu(at, r.ok()));
         };
-        self.rpc_reply("agent.kinds", params, move |app, r| {
-            let kinds = r.ok().and_then(|v| v.as_array().cloned()).unwrap_or_default();
-            app.menu = Some(Menu { at, entries: entries(&kinds) });
+        self.rpc_reply("agent.kinds", json!({"machine": machine}), move |app, r| match r {
+            Ok(v) => app.show_new_menu(at, Some(v)),
+            Err(_) => app.rpc_reply("agent.kinds", json!({}), move |app, r| {
+                let unchecked = r.ok().map(|v| json!(v.as_array().into_iter().flatten().map(|k| {
+                    let mut k = k.clone();
+                    k["installed"] = Value::Null;
+                    k
+                }).collect::<Vec<_>>()));
+                app.show_new_menu(at, unchecked);
+            }),
         });
+    }
+
+    fn show_new_menu(&mut self, at: Point<Pixels>, kinds: Option<Value>) {
+        let kinds = kinds.and_then(|v| v.as_array().cloned()).unwrap_or_default();
+        self.menu = Some(Menu { at, entries: entries(&kinds) });
     }
 
     /// The Changes panel on its Worktrees tab, for the focused pane.
@@ -99,6 +112,12 @@ mod tests {
         assert_eq!(items[0], ("Terminal", None, true));
         assert_eq!(&items[1..4], &[("Claude Code", Some("1"), true), ("Gemini", None, false), ("Codex", Some("2"), true)]);
         assert_eq!(items.last().unwrap().0, "Open worktree…");
+    }
+
+    #[test]
+    fn agents_a_machine_could_not_check_are_offered() {
+        let lines = entries(&[json!({"kind": "codex", "label": "Codex", "command": "codex", "installed": null})]);
+        assert!(lines.iter().filter_map(act_of).any(|i| i == ("Codex", Some("1"), true)));
     }
 
     #[test]
