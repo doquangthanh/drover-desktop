@@ -139,9 +139,17 @@ impl DroverApp {
 
     /// Like Herdr: a new space with a shell in the folder the focused pane is in.
     pub fn new_space(&mut self, _cx: &mut Context<Self>) {
-        let params = match self.focused.as_ref() {
-            Some(from) => json!({"new": true, "from": from}),
-            None => json!({"new": true}),
+        self.new_space_on(None);
+    }
+
+    /// A new space on `machine` (its home folder there), or on this computer in the focused local pane's folder
+    /// (as the web UI's `newSpace`): a remote pane's folder means nothing here, so it is not passed as `from`.
+    pub fn new_space_on(&mut self, machine: Option<&str>) {
+        let local_from = self.focused.as_deref().and_then(|p| self.store.pane(p)).filter(|p| p.machine.is_empty() || p.machine == "local");
+        let params = match (machine, local_from) {
+            (Some(m), _) => json!({"new": true, "machine": m}),
+            (None, Some(p)) => json!({"new": true, "from": p.id}),
+            (None, None) => json!({"new": true}),
         };
         self.rpc_then("space.create", params, Self::focus_created);
     }

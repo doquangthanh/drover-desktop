@@ -8,7 +8,10 @@ use crate::ui_scale::px;
 use crate::theme::{self, chrome, dim, done, fg, muted, UI_FONT};
 use crate::ui_config::{AgentCol, SpaceCol};
 use crate::widgets::{age, avatar, icon, kind_icon, state_mark};
+use crate::scrollbar::with_scrollbar;
+use crate::sidebar_fold::{AUTO_FOLD_AGENTS, AUTO_FOLD_SPACES};
 use crate::views::View;
+use drover_proto::wire::Space;
 use crate::workspace_app::DroverApp;
 
 fn ibtn(name: &str) -> Div {
@@ -27,12 +30,29 @@ fn srow(on: bool) -> Div {
         .when(on, |d| d.bg(theme::selected())).when(!on, |d| d.hover(|d| d.bg(theme::hover())))
 }
 
-/// The heading over one machine's spaces: icon, name, an optional button, and a connected / not dot.
-fn group_head(icon_name: &str, label: String, ok: bool, extra: Option<Div>) -> Div {
-    div().h(px(26.)).flex().items_center().gap(px(7.)).px(px(8.)).text_size(px(11.)).text_color(rgb(dim()))
+/// ▾ open / ▸ folded, with how many rows a folded group hides.
+fn fold_mark(folded: bool, count: usize) -> Div {
+    div().flex_none().flex().items_center().gap(px(4.)).text_size(px(11.)).text_color(rgb(dim()))
+        .when(folded, |d| d.child(count.to_string())).child(if folded { "▸" } else { "▾" })
+}
+
+/// The heading over one machine's spaces: icon, name, an optional button, a connected / not dot and the fold mark.
+fn group_head(icon_name: &str, label: String, ok: bool, extra: Option<Div>, folded: bool, count: usize) -> Div {
+    div().h(px(26.)).flex().items_center().gap(px(7.)).px(px(8.)).rounded(px(6.)).text_size(px(11.)).text_color(rgb(dim()))
+        .hover(|d| d.bg(theme::hover()))
         .child(icon(icon_name, 13., dim())).child(div().flex_1().min_w_0().truncate().child(label))
         .children(extra)
         .child(div().size(px(6.)).flex_none().rounded_full().bg(rgb(if ok { done() } else { theme::error() })))
+        .child(fold_mark(folded, count))
+}
+
+/// One machine's spaces under its heading; a click on the heading folds / opens them (sidebar_fold.rs).
+fn space_group(app: &DroverApp, key: String, head: (&str, String, bool), extra: Option<Div>, list: Vec<&Space>, cx: &mut Context<DroverApp>) -> Div {
+    let keep_open = list.iter().any(|s| app.space.as_deref() == Some(s.id.as_str()) || app.store.space_state(&s.id) == "blocked");
+    let folded = app.is_folded(&key, app.store.spaces.len(), AUTO_FOLD_SPACES, keep_open);
+    let head = group_head(head.0, head.1, head.2, extra, folded, list.len())
+        .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.toggle_fold(key.clone(), folded, cx)));
+    div().flex().flex_col().child(head).when(!folded, |d| d.children(list.into_iter().map(|s| space_row(app, s, cx))))
 }
 
 /// One space row: the columns the user asked for (ui_config.rs) in their order; click selects, double click renames,
@@ -77,28 +97,44 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .child(ibtn("sidebar").on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.sidebar_open = false; cx.notify(); })));
 
     // This computer first, then every machine with the spaces its snapshot carries (as `shell/sidebar.tsx`).
-    let plus = div().on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_space(cx))).child(icon("plus", 13., dim()));
-    let mut spaces = div().flex().flex_col().px(px(8.)).pb(px(10.))
-        .child(group_head("monitor", "This computer".into(), app.connected, Some(plus)));
-    for s in app.store.spaces.iter().filter(|s| s.machine.as_deref().is_none_or(|m| m.is_empty() || m == "local")) {
-        spaces = spaces.child(space_row(app, s, cx));
-    }
+    let plus = div().on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { cx.stop_propagation(); app.new_space(cx); }))
+        .child(icon("plus", 13., dim()));
+    let local: Vec<&Space> = app.store.spaces.iter().filter(|s| s.machine.as_deref().is_none_or(|m| m.is_empty() || m == "local")).collect();
+    let mut spaces = div().id("sidebar-spaces").flex_1().min_h_0().overflow_y_scroll().track_scroll(&app.sidebar_scroll[0]).flex().flex_col().px(px(8.)).pb(px(10.))
+        .child(space_group(app, "m:local".into(), ("monitor", "This computer".into(), app.connected), Some(plus), local, cx));
     for m in app.store.machines.as_array().into_iter().flatten() {
         let (alias, status) = (m["alias"].as_str().unwrap_or("?"), m["status"].as_str().unwrap_or(""));
         let label = if status == "connected" { alias.to_string() } else { format!("{alias} · {status}") };
-        spaces = spaces.child(group_head("server", label, status == "connected", None));
-        for s in app.store.spaces.iter().filter(|s| s.machine.as_deref() == Some(alias)) {
-            spaces = spaces.child(space_row(app, s, cx));
-        }
+        let list: Vec<&Space> = app.store.spaces.iter().filter(|s| s.machine.as_deref() == Some(alias)).collect();
+        // + opens a new space on that machine; only offered while it is connected.
+        let on = alias.to_string();
+        let plus = (status == "connected").then(|| div()
+            .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.new_space_on(Some(&on)); }))
+            .child(icon("plus", 13., dim())));
+        spaces = spaces.child(space_group(app, format!("m:{alias}"), ("server", label, status == "connected"), plus, list, cx));
     }
 
-    let mut agents = div().flex().flex_col().px(px(8.)).pb(px(10.));
+    let mut agents = div().id("sidebar-agents").flex_1().min_h_0().overflow_y_scroll().track_scroll(&app.sidebar_scroll[1]).flex().flex_col().px(px(8.)).pb(px(10.));
+    let total = app.store.panes.iter().filter(|p| p.kind != "shell").count();
     for s in &app.store.spaces {
         let list: Vec<_> = app.store.panes_of_space(&s.id).filter(|p| p.kind != "shell").collect();
         if list.is_empty() {
             continue;
         }
-        agents = agents.child(div().h(px(24.)).flex().items_center().px(px(8.)).text_size(px(11.)).text_color(rgb(dim())).child(s.name.clone()));
+        // Folds like a machine's spaces; kept open while it holds the focused agent or one that needs you.
+        let (key, state) = (format!("s:{}", s.id), app.store.space_state(&s.id).to_string());
+        let keep_open = state == "blocked" || list.iter().any(|p| app.focused.as_deref() == Some(p.id.as_str()));
+        let folded = app.is_folded(&key, total, AUTO_FOLD_AGENTS, keep_open);
+        agents = agents.child(div().h(px(24.)).flex().items_center().gap(px(6.)).px(px(8.)).rounded(px(6.)).text_size(px(11.)).text_color(rgb(dim()))
+            .hover(|d| d.bg(theme::hover()))
+            .child(div().flex_1().min_w_0().truncate().child(s.name.clone()))
+            .when(folded && matches!(state.as_str(), "working" | "blocked"),
+                |d| d.child(state_mark(&state, None, gpui::SharedString::from(format!("agf-{}", s.id)))))
+            .child(fold_mark(folded, list.len()))
+            .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.toggle_fold(key.clone(), folded, cx))));
+        if folded {
+            continue;
+        }
         for p in list {
             let on = app.focused.as_deref() == Some(p.id.as_str());
             let (pane_id, menu_id) = (p.id.clone(), p.id.clone());
@@ -148,9 +184,9 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         .font_family(UI_FONT).text_size(px(13.)).child(edge)
         .child(brand)
         .child(half().child(shead("Spaces").child(div().on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.new_space(cx)))
-            .child(icon("plus", 14., dim())))).child(spaces))
+            .child(icon("plus", 14., dim())))).child(with_scrollbar(spaces, &app.sidebar_scroll[0], 0, cx)))
         .child(half().border_t_1().border_color(theme::border()).child(shead("Agents").child(div().rounded(px(5.)).hover(|d| d.bg(theme::hover()))
             .child(icon("layers", 14., dim()))
-            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.set_view(View::Agents, window, cx))))).child(agents))
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.set_view(View::Agents, window, cx))))).child(with_scrollbar(agents, &app.sidebar_scroll[1], 1, cx)))
         .child(foot)
 }

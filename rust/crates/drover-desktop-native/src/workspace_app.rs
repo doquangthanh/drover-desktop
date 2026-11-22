@@ -116,6 +116,10 @@ pub struct DroverApp {
     pub window_active: bool,
     /// Tabs put away on this screen (tab settle): hidden from the tab bar and skipped by next / previous, still running.
     pub settled: std::collections::HashSet<String>,
+    /// Sidebar groups the user folded (true) or opened (false), by key (sidebar_fold.rs).
+    pub folds: std::collections::HashMap<String, bool>,
+    /// Scroll positions of the sidebar's Spaces (0) and Agents (1) lists, for their scrollbars (scrollbar.rs).
+    pub sidebar_scroll: [gpui::ScrollHandle; 2],
     /// Terminal text zoom: the size the daemon / default gives, plus the points added with Ctrl+= / Ctrl+-.
     pub base_size: f32,
     /// This device's own font (font_prefs.rs), what the daemon last reported, and the Settings → Appearance form.
@@ -124,6 +128,8 @@ pub struct DroverApp {
     pub mouse_reporting: Option<String>,
     /// The cell the mouse was last reported at, so a motion inside one cell is not sent again.
     pub mouse_last: Option<(String, usize, usize)>,
+    /// A press in a program that tracks clicks only, held until release: sent as a click if nothing got selected.
+    pub mouse_click: Option<(String, usize, usize)>,
     pub daemon_font: (String, f32),
     pub font_form: crate::views::settings_look::FontForm,
     /// The multi-line editor of Settings (one file at a time).
@@ -178,7 +184,7 @@ impl DroverApp {
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
                     chord: false, show_shortcuts: false, picker: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
-                    toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
+                    toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), folds: Default::default(), sidebar_scroll: [gpui::ScrollHandle::new(), gpui::ScrollHandle::new()], base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, mouse_click: None, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 
     fn drain(&mut self) -> bool {
@@ -456,6 +462,7 @@ impl Render for DroverApp {
             .on_mouse_up(gpui::MouseButton::Left, cx.listener(|app, _, _, cx| app.drag_end(cx)))
             .when(self.drag.is_some(), |d| match &self.drag {
                 Some(crate::drag::Drag::Split { dir: drover_proto::wire::Dir::Col, .. }) => d.cursor_row_resize(),
+                Some(crate::drag::Drag::Scroll { .. }) => d,
                 _ => d.cursor_col_resize(),
             })
             .child(div().flex().flex_row().flex_1().min_h_0()
