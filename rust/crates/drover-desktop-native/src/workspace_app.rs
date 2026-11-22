@@ -97,6 +97,9 @@ pub struct DroverApp {
     /// Your shortcuts from keys.toml (keymap.rs), and whether they were asked for yet.
     pub keymap: crate::keymap::Keymap,
     pub keymap_loaded: bool,
+    /// Sidebar rows and window title as set in keys.toml (ui_config.rs), and the title last given to the window.
+    pub ui: crate::ui_config::UiConfig,
+    pub window_title: String,
     /// Kitty graphics per pane (kitty_graphics.rs), and the size of a terminal cell in pixels as last painted.
     pub graphics: Arc<Mutex<HashMap<String, crate::kitty_graphics::Graphics>>>,
     pub cell_size: (f32, f32),
@@ -172,7 +175,7 @@ impl DroverApp {
                     settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
-                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
+                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
                     toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 
@@ -422,6 +425,15 @@ impl Render for DroverApp {
             self.keymap_loaded = true;
             self.load_keymap(false);
             self.reload_plugins(false);
+        }
+        // Window title from the format in keys.toml; set only when it changes.
+        let (space, agent) = (self.space.as_deref().and_then(|s| self.store.spaces.iter().find(|x| x.id == s)), self.focused.as_deref().and_then(|p| self.store.pane(p)));
+        let tab = agent.and_then(|p| self.store.tab(&p.tab_id)).map(|t| t.name.as_str()).unwrap_or("");
+        let title = crate::ui_config::title(&self.ui.window_title, space.map(|s| s.name.as_str()).unwrap_or(""), tab,
+            agent.map(|p| p.name.as_str()).unwrap_or(""), agent.map(|p| p.state.as_str()).unwrap_or(""));
+        if title != self.window_title {
+            window.set_window_title(&title);
+            self.window_title = title;
         }
         let view_size = window.viewport_size();
         let overlay = crate::dialogs::confirm_overlay(self, cx).or_else(|| crate::picker::overlay(self, cx))
