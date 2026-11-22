@@ -6,6 +6,7 @@ use gpui::{Context, Div, FontWeight, Image, ImageFormat, MouseButton, div, img, 
 use crate::ui_scale::px;
 
 use crate::theme::{self, chrome, dim, done, fg, muted, UI_FONT};
+use crate::ui_config::{AgentCol, SpaceCol};
 use crate::widgets::{age, avatar, icon, kind_icon, state_mark};
 use crate::views::View;
 use crate::workspace_app::DroverApp;
@@ -44,25 +45,26 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         let on = app.space.as_deref() == Some(s.id.as_str());
         let (id, close_id) = (s.id.clone(), s.id.clone());
         let state = app.store.space_state(&s.id).to_string();
-        let mut git = div().flex_none().ml_auto().flex().items_center().gap(px(5.)).text_size(px(11.5)).text_color(rgb(dim()));
-        if let Some(b) = s.branch.as_ref() {
-            git = git.child(div().max_w(px(130.)).truncate().child(b.clone()));
-        }
-        if s.dirty.unwrap_or(0) > 0 {
-            git = git.child(div().size(px(5.)).rounded_full().bg(rgb(theme::yellow())));
-        }
-        if matches!(state.as_str(), "working" | "blocked") {
-            git = git.child(state_mark(&state, None, gpui::SharedString::from(format!("sp-{}", s.id))));
-        }
+        let small = || div().flex_none().text_size(px(11.5)).text_color(rgb(dim()));
         // Shown on the selected row only, so other rows keep their width for the name (middle click closes any).
         let close = div().size(px(18.)).flex_none().rounded(px(5.)).flex().items_center().justify_center()
             .hover(|d| d.bg(theme::hover()))
             .child(icon("close", 11., dim()))
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_space(&close_id, cx); }));
         let (middle_id, menu_id) = (s.id.clone(), s.id.clone());
-        spaces = spaces.child(srow(on).child(avatar(&s.name, s.color))
-            .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(s.name.clone()))
-            .child(git).when(on, |d| d.child(close))
+        // The columns the user asked for (ui_config.rs), in their order.
+        let mut row = srow(on);
+        for col in &app.ui.space_row {
+            row = match col {
+                SpaceCol::Avatar => row.child(avatar(&s.name, s.color)),
+                SpaceCol::Name => row.child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(s.name.clone())),
+                SpaceCol::Branch => row.children(s.branch.as_ref().map(|b| small().max_w(px(130.)).truncate().child(b.clone()))),
+                SpaceCol::Dirty => row.when(s.dirty.unwrap_or(0) > 0, |d| d.child(div().size(px(5.)).flex_none().rounded_full().bg(rgb(theme::yellow())))),
+                SpaceCol::State => row.when(matches!(state.as_str(), "working" | "blocked"),
+                    |d| d.child(small().child(state_mark(&state, None, gpui::SharedString::from(format!("sp-{}", s.id)))))),
+            };
+        }
+        spaces = spaces.child(row.when(on, |d| d.child(close))
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, window, cx| {
                 if ev.click_count >= 2 { app.open_rename_space(Some(id.clone()), window, cx); } else { app.select_space(id.clone(), cx); }
             }))
@@ -82,10 +84,16 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         for p in list {
             let on = app.focused.as_deref() == Some(p.id.as_str());
             let (pane_id, menu_id) = (p.id.clone(), p.id.clone());
-            agents = agents.child(srow(on).child(kind_icon(&p.kind))
-                .child(div().flex_1().min_w_0().truncate().when(p.state == "idle", |d| d.text_color(rgb(muted()))).child(p.name.clone()))
-                .child(div().flex_none().text_size(px(11.)).text_color(rgb(dim())).child(age(p.since)))
-                .child(state_mark(&p.state, p.exit_code, gpui::SharedString::from(format!("ag-{}", p.id))))
+            let mut row = srow(on);
+            for col in &app.ui.agent_row {
+                row = match col {
+                    AgentCol::Icon => row.child(kind_icon(&p.kind)),
+                    AgentCol::Name => row.child(div().flex_1().min_w_0().truncate().when(p.state == "idle", |d| d.text_color(rgb(muted()))).child(p.name.clone())),
+                    AgentCol::Age => row.child(div().flex_none().text_size(px(11.)).text_color(rgb(dim())).child(age(p.since))),
+                    AgentCol::State => row.child(state_mark(&p.state, p.exit_code, gpui::SharedString::from(format!("ag-{}", p.id)))),
+                };
+            }
+            agents = agents.child(row
                 .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| {
                     app.show_pane(&pane_id);
                     window.focus(&app.term_focus);

@@ -120,7 +120,10 @@ impl DroverApp {
     pub fn load_keymap(&mut self, announce: bool) {
         self.rpc_reply("settings.files", json!({}), move |app, r| {
             let text = r.ok().map(|d| crate::views::settings::file_text(&d, "keys.toml")).unwrap_or_default();
-            let (keymap, problems) = parse(&text);
+            let (keymap, mut problems) = parse(&text);
+            let (ui, ui_problems) = crate::ui_config::parse(&text);
+            problems.extend(ui_problems);
+            app.ui = ui;
             let count = keymap.len();
             app.keymap = keymap;
             if !problems.is_empty() {
