@@ -50,7 +50,7 @@ impl DroverApp {
         self.fired.lock().unwrap().push(rx);
     }
 
-    fn rpc_then(&mut self, method: &str, params: Value, then: fn(&mut DroverApp, Value)) {
+    pub(crate) fn rpc_then(&mut self, method: &str, params: Value, then: fn(&mut DroverApp, Value)) {
         self.rpc_reply(method, params, move |app, r| match r {
             Ok(v) => then(app, v),
             Err(e) => eprintln!("drover: {e}"),
@@ -121,7 +121,7 @@ impl DroverApp {
         self.rpc("pane.focus", json!({"pane": pane}));
     }
 
-    fn focus_created(app: &mut DroverApp, v: Value) {
+    pub(crate) fn focus_created(app: &mut DroverApp, v: Value) {
         // The state event with the new pane may come after the reply: remember it, the drain loop shows it.
         let id = v["id"].as_str().or_else(|| v["pane"]["id"].as_str()).unwrap_or("").to_string();
         app.show_when_known = Some(id);
@@ -134,11 +134,7 @@ impl DroverApp {
 
     pub fn new_tab(&mut self, cx: &mut Context<Self>) {
         trace("button: new tab");
-        let cwd = self.space.as_ref().and_then(|s| self.store.spaces.iter().find(|x| &x.id == s)).map(|s| s.cwd.clone());
-        match cwd {
-            Some(cwd) => self.rpc_then("pane.create", json!({"command": "", "cwd": cwd}), Self::focus_created),
-            None => self.new_space(cx),
-        }
+        self.start_in_space("", None, cx);
     }
 
     /// Like Herdr: a new space with a shell in the folder the focused pane is in.

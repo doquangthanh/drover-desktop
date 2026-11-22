@@ -20,6 +20,7 @@ pub enum Kind {
     RenameTab,
     RenameMachine,
     InstallPlugin,
+    NewWorktree,
     Find,
 }
 
@@ -108,6 +109,7 @@ impl DroverApp {
             Kind::RenameSpace | Kind::RenameTab => return self.rename_picked(window, cx),
             Kind::RenameMachine => return,
             Kind::InstallPlugin => return self.open_plugin_install(window, cx),
+            Kind::NewWorktree => ("Task name: a new branch dr/<task> in its own folder", String::new()),
         };
         self.open_picker_with(kind, (placeholder, text), None, window, cx);
     }
@@ -151,7 +153,7 @@ impl DroverApp {
                 .map(|(l, k, c)| (Row::Cmd(*c), l.to_string(), k.to_string()))
                 .chain(self.plugin_actions().into_iter().filter(|(_, l)| has(l.clone())).map(|(id, l)| (Row::Plugin(id), l, "plugin".to_string())))
                 .collect(),
-            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::InstallPlugin | Kind::Find => vec![],
+            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::InstallPlugin | Kind::NewWorktree | Kind::Find => vec![],
         }
     }
 
@@ -170,6 +172,11 @@ impl DroverApp {
                 let input = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
                 self.close_picker(cx);
                 if !input.is_empty() { self.ask_install_plugin(&input, cx); }
+            }
+            Kind::NewWorktree => {
+                let task = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
+                self.close_picker(cx);
+                if !task.is_empty() { self.start_in_space("", Some(&task), cx); }
             }
             Kind::RenameMachine => {
                 let name = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
@@ -277,7 +284,7 @@ fn fold(s: &str) -> String {
 
 pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let p = app.picker.as_ref()?;
-    let title = match p.kind { Kind::Jump => "Jump to", Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::InstallPlugin => "Install a plugin", Kind::Find => "Find in terminal" };
+    let title = match p.kind { Kind::Jump => "Jump to", Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::Find => "Find in terminal" };
     let mut list = div().flex().flex_col().gap(px(1.)).max_h(px(420.)).overflow_hidden();
     for (i, (row, label, detail)) in app.picker_rows(cx).into_iter().take(14).enumerate() {
         let on = i == p.selected;
