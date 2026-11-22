@@ -91,11 +91,18 @@ impl DroverApp {
     }
 
     pub fn on_wheel(&mut self, pane: &str, ev: &ScrollWheelEvent, cx: &mut Context<Self>) {
+        // A notch of the wheel is `scroll_lines` lines, more when turned fast; a touchpad moves by pixels, kept as is.
+        let now = std::time::Instant::now();
+        let quick = now.duration_since(self.wheel_at) < std::time::Duration::from_millis(90);
+        self.wheel_at = now;
+        self.wheel_streak = if quick { (self.wheel_streak + 1).min(WHEEL_MAX_STREAK) } else { 0 };
         let lines = match ev.delta {
-            ScrollDelta::Lines(p) => p.y * 3.0,
+            ScrollDelta::Lines(p) => p.y * self.ui.scroll_lines * wheel_boost(self.wheel_streak),
             ScrollDelta::Pixels(p) => f32::from(p.y) / self.term_font.line_height,
         };
-        let n = lines.round() as i32;
+        // What is left of a line is kept for the next event, so small touchpad moves add up instead of being lost.
+        let (n, rest) = whole_lines(self.wheel_rest, lines);
+        self.wheel_rest = rest;
         if n == 0 {
             return;
         }
