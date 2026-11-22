@@ -18,6 +18,9 @@ pub struct MachinesForm {
     pub port: Entity<TextInput>,
     pub key: Entity<TextInput>,
     pub install: bool,
+    /// Hosts found in ~/.ssh (ssh_hosts.rs), offered as buttons; and whether Name / Port / Key are shown.
+    pub hosts: Vec<String>,
+    pub more: bool,
     /// What the last test / add said: busy text, steps, or an error.
     pub log: Option<(Vec<String>, Option<String>)>,
 }
@@ -25,16 +28,19 @@ pub struct MachinesForm {
 impl MachinesForm {
     pub fn new(cx: &mut Context<DroverApp>) -> Self {
         let mut make = |p: &str| cx.new(|cx| TextInput::new(p, cx));
-        MachinesForm { alias: make("vps-2"), target: make("deploy@vps-2.tail-net"), port: make("22"),
-                       key: make("Use ssh-agent / default keys"), install: false, log: None }
+        MachinesForm { alias: make("Same as the host"), target: make("workbox  or  user@host"), port: make("22 (or the Port in ~/.ssh/config)"),
+                       key: make("Use ssh-agent / default keys"), install: false, hosts: crate::ssh_hosts::detect(), more: false, log: None }
     }
 }
 
 impl DroverApp {
+    /// The host is enough: the name is taken from it and the port and key from ~/.ssh/config unless filled in.
     fn machine_params(&self, cx: &gpui::App) -> Value {
         let f = &self.machines_form;
         let t = |e: &Entity<TextInput>| e.read(cx).text.trim().to_string();
-        json!({"alias": t(&f.alias), "target": t(&f.target), "port": t(&f.port).parse::<u16>().unwrap_or(22), "key": t(&f.key)})
+        let target = t(&f.target);
+        let alias = Some(t(&f.alias)).filter(|a| !a.is_empty()).unwrap_or_else(|| crate::ssh_hosts::alias_for(&target));
+        json!({"alias": alias, "target": target, "port": t(&f.port).parse::<u16>().unwrap_or(22), "key": t(&f.key)})
     }
 
     pub fn machine_test(&mut self, cx: &mut Context<Self>) {
@@ -113,16 +119,35 @@ pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
                 .child(ui::button("Remove", Kind::Danger).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.ask_remove_machine(a.clone(), cx))))));
     }
     let f = &app.machines_form;
-    let mut log = div().flex().flex_col().gap(px(3.)).text_size(px(12.));
+    // Hosts from ~/.ssh that are not saved yet.
+    let saved: Vec<&str> = app.store.machines.as_array().into_iter().flatten()
+        .flat_map(|m| [m["alias"].as_str(), m["target"].as_str()]).flatten().collect();
+    let offered: Vec<String> = f.hosts.iter().filter(|h| !saved.contains(&h.as_str())).cloned().collect();
+    let mut log =div().flex().flex_col().gap(px(3.)).text_size(px(12.));
     if let Some((steps, err)) = &f.log {
         for s in steps { log = log.child(div().text_color(rgb(fg())).child(s.clone())); }
         if let Some(e) = err { log = log.child(div().text_color(rgb(error())).child(e.clone())); }
     }
     let form = div().w(px(340.)).flex_none().flex().flex_col().gap(px(12.)).p(px(16.)).border_l_1().border_color(theme::border())
         .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).child("Add a machine"))
-        .child(field("Name", &f.alias))
-        .child(field("SSH target (user@host or a Host from ~/.ssh/config)", &f.target))
-        .child(div().flex().gap(px(8.)).child(div().w(px(80.)).child(field("Port", &f.port))).child(div().flex_1().child(field("Key file", &f.key))))
+        .child(field("Host (a name from ~/.ssh/config, or user@host)", &f.target))
+        .when(!offered.is_empty(), |d| d.child(div().flex().flex_col().gap(px(5.))
+            .child(div().text_size(px(12.)).text_color(rgb(muted())).child("Found on this computer"))
+            .child(div().flex().flex_wrap().gap(px(6.)).children(offered.into_iter().map(|h| {
+                let pick = h.clone();
+                div().px(px(9.)).py(px(3.)).rounded(px(6.)).border_1().border_color(theme::border()).text_size(px(12.))
+                    .hover(|d| d.bg(theme::hover())).child(h)
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {
+                        let target = app.machines_form.target.clone();
+                        target.update(cx, |t, cx| t.set_text(&pick, cx));
+                        cx.notify();
+                    }))
+            })))))
+        .child(div().flex().items_center().gap(px(6.)).text_size(px(12.)).text_color(rgb(muted()))
+            .child(if f.more { "▾" } else { "▸" }).child("More options (name, port, key)")
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.machines_form.more = !app.machines_form.more; cx.notify(); })))
+        .when(f.more, |d| d.child(field("Name", &f.alias))
+            .child(div().flex().gap(px(8.)).child(div().w(px(80.)).child(field("Port", &f.port))).child(div().flex_1().child(field("Key file", &f.key)))))
         .child(div().flex().items_center().gap(px(8.)).child(ui::toggle(f.install)).child(div().text_size(px(12.5)).child("Install dr there if missing (Linux/macOS)"))
             .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.machines_form.install = !app.machines_form.install; cx.notify(); })))
         .child(div().text_size(px(12.)).text_color(rgb(dim())).child("Host keys are checked against known_hosts. The daemon there only listens on 127.0.0.1; Drover reaches it through the SSH tunnel."))
