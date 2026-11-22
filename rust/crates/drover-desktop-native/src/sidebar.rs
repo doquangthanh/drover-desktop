@@ -152,7 +152,9 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
                 };
             }
             agents = agents.child(row
-                .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| {
+                // Alt+click peeks at it (peek.rs) instead of going there.
+                .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, window, cx| {
+                    if ev.modifiers.alt { return app.open_peek(&pane_id, window, cx); }
                     app.show_pane(&pane_id);
                     window.focus(&app.term_focus);
                     cx.notify();

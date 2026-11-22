@@ -20,6 +20,7 @@ mod machines_edit;
 mod new_pane_menu;
 mod keys;
 mod layout_view;
+mod peek;
 mod picker;
 mod powerline;
 mod sidebar;

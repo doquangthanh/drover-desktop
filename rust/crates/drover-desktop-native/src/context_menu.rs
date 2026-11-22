@@ -15,7 +15,7 @@ use crate::workspace_app::DroverApp;
 pub enum Act {
     RenameSpace(String), CloseSpace(String),
     RenameTab(String), SettleTab(String), CloseTab(String),
-    RenameAgent(String), SplitRight(String), SplitDown(String), Zoom(String), ClosePane(String),
+    RenameAgent(String), Peek(String), SplitRight(String), SplitDown(String), Zoom(String), ClosePane(String),
     Copy, Paste, SelectAll, ClearPane,
     // The tab bar's + menu (new_pane_menu.rs): the String of StartAgent is the agent's command.
     NewShell, StartAgent(String), NewSpace, NewWorktree, OpenWorktrees,
@@ -56,6 +56,10 @@ pub fn pane_items(id: &str, with_text: bool) -> Vec<Entry> {
     let mut items = vec![];
     if with_text {
         items.extend([item("Copy", Act::Copy), item("Paste", Act::Paste), item("Select all", Act::SelectAll), item("Clear screen and scrollback", Act::ClearPane)]);
+    }
+    if !with_text {
+        // The sidebar's menu: a pane that may not be in front of you.
+        items.push(item("Peek (stay where you are)", Act::Peek(id.into())));
     }
     items.extend([item("Rename agent", Act::RenameAgent(id.into())), item("Split right", Act::SplitRight(id.into())),
                   item("Split down", Act::SplitDown(id.into())), item("Zoom pane", Act::Zoom(id.into())), item("Close pane", Act::ClosePane(id.into()))]);
@@ -99,6 +103,7 @@ impl DroverApp {
             Act::SettleTab(id) => { self.select_tab(id, cx); self.settle_current_tab(cx); }
             Act::CloseTab(id) => self.ask_close_tab(&id, cx),
             Act::RenameAgent(id) => { self.show_pane(&id); self.open_picker(Kind::Rename, window, cx); }
+            Act::Peek(id) => self.open_peek(&id, window, cx),
             Act::SplitRight(id) => self.split(&id, "row"),
             Act::SplitDown(id) => self.split(&id, "col"),
             Act::Zoom(id) => self.toggle_zoom(&id),

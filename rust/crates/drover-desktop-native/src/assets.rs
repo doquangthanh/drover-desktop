@@ -24,6 +24,7 @@ const ICONS: &[(&str, &str)] = &[
     ("alert", r#"<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.5h.01"/>"#),
     ("info", r#"<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/>"#),
     ("up", r#"<path d="M12 19V5M5 12l7-7 7 7"/>"#),
+    ("back", r#"<path d="M19 12H5M12 19l-7-7 7-7"/>"#),
     ("tab", r#"<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/>"#),
     // The working spinner: a ring with a gap, rotated by an animation (`.spin` in base.css).
     ("spin", r#"<path d="M12 3a9 9 0 1 1-9 9"/>"#),

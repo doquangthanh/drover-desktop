@@ -18,6 +18,18 @@ pub fn header(icon_name: &str, title: &str) -> Div {
         .child(div().flex_1())
 }
 
+/// The bar over one opened item (a file, a diff): "← Files" goes back to the list, the item's name on the right.
+pub fn back_header(title: &str, item: String,
+                   on_back: impl Fn(&gpui::MouseDownEvent, &mut gpui::Window, &mut gpui::App) + 'static) -> Div {
+    div().h(px(42.)).flex_none().flex().items_center().gap(px(8.)).px(px(8.)).border_b_1().border_color(theme::border())
+        .font_family(UI_FONT)
+        .child(div().flex_none().h(px(28.)).px(px(6.)).flex().items_center().gap(px(8.)).rounded(px(6.))
+            .hover(|d| d.bg(theme::hover())).on_mouse_down(gpui::MouseButton::Left, on_back)
+            .child(icon("back", 15., muted()))
+            .child(div().text_size(px(13.5)).font_weight(FontWeight::SEMIBOLD).text_color(rgb(fg())).child(title.to_string())))
+        .child(div().flex_1().min_w_0().flex().justify_end().text_size(px(12.)).text_color(rgb(dim())).child(div().truncate().child(item)))
+}
+
 /// A fixed-width left column and a flexible right one, separated by a border.
 pub fn split(left_width: f32, left: impl IntoElement, right: impl IntoElement) -> Div {
     div().flex().flex_row().flex_1().min_h_0().min_w_0()

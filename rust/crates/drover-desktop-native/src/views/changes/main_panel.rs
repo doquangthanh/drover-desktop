@@ -46,6 +46,16 @@ pub fn diff_view(rows: Arc<Vec<DiffRow>>, family: SharedString) -> Div {
 }
 
 pub fn panel(app: &DroverApp, current: Option<&Worktree>, base: &str, file: Option<&str>, cx: &mut Context<DroverApp>) -> Div {
+    // An opened file: its diff on its own, "← Changes" goes back to the list.
+    if let Some(file) = file {
+        let back = ui::back_header("Changes", file.to_string(), cx.listener(|app, _, _, cx| { app.changes.picked_file = None; cx.notify(); }));
+        let diff = match &app.changes.diff {
+            None => ui::note("Loading diff…", false),
+            Some(Err(e)) => ui::note(e.clone(), true),
+            Some(Ok(rows)) => diff_view(rows.clone(), app.code_family.clone()),
+        };
+        return div().flex().flex_col().flex_1().min_h_0().min_w_0().child(back).child(diff);
+    }
     let branch = current.and_then(|t| t.branch.clone()).unwrap_or_default();
     let path = current.map(|t| t.path.clone()).unwrap_or_default();
     let mut head = div().min_h(px(46.)).flex_none().flex().flex_wrap().items_center().gap(px(8.)).px(px(12.)).py(px(8.))
@@ -86,7 +96,7 @@ pub fn panel(app: &DroverApp, current: Option<&Worktree>, base: &str, file: Opti
                 let (name, dir) = changes::split_path(&f.path);
                 let status = f.status.clone().unwrap_or("M".into());
                 let id = f.path.clone();
-                files = files.child(ui::row(file == Some(f.path.as_str())).text_size(px(12.5))
+                files = files.child(ui::row(false).text_size(px(12.5))
                     .child(div().w(px(14.)).flex_none().text_color(rgb(status_color(&status))).child(status))
                     .child(div().flex_1().min_w_0().flex().gap(px(5.)).overflow_hidden()
                         .child(div().flex_none().child(name.to_string()))
@@ -100,15 +110,6 @@ pub fn panel(app: &DroverApp, current: Option<&Worktree>, base: &str, file: Opti
             }
         }
     }
-    let diff = match (&app.changes.diff, file) {
-        (_, None) => div().flex_1(),
-        (None, _) => ui::note("Loading diff…", false),
-        (Some(Err(e)), _) => ui::note(e.clone(), true),
-        (Some(Ok(rows)), _) => diff_view(rows.clone(), app.code_family.clone()),
-    };
-    // Narrow panel: the files on top, the diff under them.
-    let body = div().flex().flex_col().flex_1().min_h_0()
-        .child(div().max_h(px(220.)).flex_none().flex().flex_col().border_b_1().border_color(theme::border()).child(files))
-        .child(diff);
-    div().flex().flex_col().flex_1().min_h_0().min_w_0().child(head).children(output).child(body)
+    // The changed files take the whole panel; a click opens one (above).
+    div().flex().flex_col().flex_1().min_h_0().min_w_0().child(head).children(output).child(files)
 }

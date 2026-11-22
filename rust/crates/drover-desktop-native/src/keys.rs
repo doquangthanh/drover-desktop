@@ -10,8 +10,9 @@ use crate::views::View;
 use crate::workspace_app::DroverApp;
 
 /// Shown by Ctrl+K Ctrl+S (dialogs.rs).
-pub const SHORTCUTS: [(&str, &str); 29] = [
-    ("Ctrl+Shift+P · F1", "All commands"), ("Ctrl+P", "Jump to a terminal or agent"), ("F2", "Rename what you picked: space, tab or agent"),
+pub const SHORTCUTS: [(&str, &str); 30] = [
+    ("Ctrl+Shift+P · F1", "All commands"), ("Ctrl+P", "Jump to a terminal or agent"),
+    ("Ctrl+K P · Alt+click an agent", "Peek at a terminal without leaving yours"), ("F2", "Rename what you picked: space, tab or agent"),
     ("Ctrl+F", "Find in the focused terminal"), ("Ctrl+K [", "Copy mode: hjkl move · v V select · y copy · Esc"),
     ("Ctrl+B", "Toggle sidebar"), ("Ctrl+,", "Settings"), ("Ctrl+K Ctrl+S", "Keyboard shortcuts"),
     ("Ctrl+= · Ctrl+- · Ctrl+0", "Terminal text bigger · smaller · normal"), ("Ctrl+Alt+= · Ctrl+Alt+- · Ctrl+Alt+0", "Interface bigger · smaller · normal"), ("Ctrl+N · Ctrl+Shift+`", "New tab"), ("Ctrl+W", "Close tab"), ("Ctrl+Tab · Ctrl+PageDown", "Next tab"),
@@ -92,6 +93,7 @@ impl DroverApp {
             "\\" | "|" if ctrl => self.split_focused("col"),
             "s" if ctrl => self.show_shortcuts = true,
             "[" if !ctrl => self.enter_copy_mode(cx),
+            "p" if !ctrl => self.open_picker(crate::picker::Kind::Peek, window, cx),
             "m" if ctrl => { if let Some(p) = self.focused.clone() { self.toggle_zoom(&p) } }
             "w" if !ctrl => { if let Some(p) = self.focused.clone() { self.ask_close_pane(&p, cx) } }
             _ => {}
