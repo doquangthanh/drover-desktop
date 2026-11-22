@@ -5,7 +5,7 @@
 //! space_row = "avatar name branch dirty state"   # any of these, in any order
 //! agent_row = "icon name age state"
 //! window_title = "{agent} · {space} — Drover"     # {space} {tab} {agent} {state}
-//! scroll_lines = 4                              # lines per mouse wheel notch
+//! scroll_lines = 3                              # lines per mouse wheel notch (default 3)
 //! ```
 //!
 //! What is left out is not shown. Saving keys.toml, or the "Reload config" command, applies it.
@@ -28,7 +28,7 @@ pub struct UiConfig {
 impl Default for UiConfig {
     fn default() -> Self {
         use {AgentCol as A, SpaceCol as S};
-        Self { space_row: vec![S::Avatar, S::Name, S::Branch, S::Dirty, S::State], agent_row: vec![A::Icon, A::Name, A::Age, A::State], window_title: "Drover".into(), scroll_lines: 4.0 }
+        Self { space_row: vec![S::Avatar, S::Name, S::Branch, S::Dirty, S::State], agent_row: vec![A::Icon, A::Name, A::Age, A::State], window_title: "Drover".into(), scroll_lines: 3.0 }
     }
 }
 

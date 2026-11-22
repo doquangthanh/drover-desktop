@@ -100,10 +100,8 @@ pub struct DroverApp {
     /// Sidebar rows and window title as set in keys.toml (ui_config.rs), and the title last given to the window.
     pub ui: crate::ui_config::UiConfig,
     pub window_title: String,
-    /// Mouse wheel: the part of a line not yet scrolled, when the last event came, and how many came in a quick row.
+    /// Mouse wheel: the part of a line not yet scrolled (kept for the next event).
     pub wheel_rest: f32,
-    pub wheel_at: std::time::Instant,
-    pub wheel_streak: u32,
     /// Kitty graphics per pane (kitty_graphics.rs), and the size of a terminal cell in pixels as last painted.
     pub graphics: Arc<Mutex<HashMap<String, crate::kitty_graphics::Graphics>>>,
     pub cell_size: (f32, f32),
@@ -179,7 +177,7 @@ impl DroverApp {
                     settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
-                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, wheel_at: std::time::Instant::now(), wheel_streak: 0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
+                    chord: false, show_shortcuts: false, picker: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
                     toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 

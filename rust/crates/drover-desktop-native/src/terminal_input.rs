@@ -91,13 +91,10 @@ impl DroverApp {
     }
 
     pub fn on_wheel(&mut self, pane: &str, ev: &ScrollWheelEvent, cx: &mut Context<Self>) {
-        // A notch of the wheel is `scroll_lines` lines, more when turned fast; a touchpad moves by pixels, kept as is.
-        let now = std::time::Instant::now();
-        let quick = now.duration_since(self.wheel_at) < std::time::Duration::from_millis(90);
-        self.wheel_at = now;
-        self.wheel_streak = if quick { (self.wheel_streak + 1).min(WHEEL_MAX_STREAK) } else { 0 };
+        // A notch of the wheel is `scroll_lines` lines (3, like Herdr). Windows already multiplies a notch by the
+        // system's "lines per notch" (3 by default) before it gets here, so only other systems scale it.
         let lines = match ev.delta {
-            ScrollDelta::Lines(p) => p.y * self.ui.scroll_lines * wheel_boost(self.wheel_streak),
+            ScrollDelta::Lines(p) => p.y * self.ui.scroll_lines / SYSTEM_NOTCH_LINES,
             ScrollDelta::Pixels(p) => f32::from(p.y) / self.term_font.line_height,
         };
         // What is left of a line is kept for the next event, so small touchpad moves add up instead of being lost.
@@ -167,12 +164,8 @@ impl EntityInputHandler for DroverApp {
     }
 }
 
-const WHEEL_MAX_STREAK: u32 = 8;
-
-/// 1x for a slow wheel, up to about 3.4x when notches come in quick succession.
-fn wheel_boost(streak: u32) -> f32 {
-    1.0 + streak as f32 * 0.3
-}
+/// Lines per notch the system has already applied to the event (Windows: its "wheel scroll lines" setting, 3 by default).
+const SYSTEM_NOTCH_LINES: f32 = if cfg!(windows) { 3.0 } else { 1.0 };
 
 /// The whole lines in `rest + lines` (towards zero), and what is left over.
 fn whole_lines(rest: f32, lines: f32) -> (i32, f32) {
@@ -197,9 +190,4 @@ mod wheel_tests {
         assert_eq!(whole_lines(0.0, -2.6).0, -2);
     }
 
-    #[test]
-    fn quick_turning_goes_further() {
-        assert_eq!(wheel_boost(0), 1.0);
-        assert!(wheel_boost(WHEEL_MAX_STREAK) > 3.0);
-    }
 }
