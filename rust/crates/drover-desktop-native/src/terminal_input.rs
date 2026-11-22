@@ -91,11 +91,15 @@ impl DroverApp {
     }
 
     pub fn on_wheel(&mut self, pane: &str, ev: &ScrollWheelEvent, cx: &mut Context<Self>) {
+        // A notch of the wheel is `scroll_lines` lines (3, like Herdr). Windows already multiplies a notch by the
+        // system's "lines per notch" (3 by default) before it gets here, so only other systems scale it.
         let lines = match ev.delta {
-            ScrollDelta::Lines(p) => p.y * 3.0,
+            ScrollDelta::Lines(p) => p.y * self.ui.scroll_lines / SYSTEM_NOTCH_LINES,
             ScrollDelta::Pixels(p) => f32::from(p.y) / self.term_font.line_height,
         };
-        let n = lines.round() as i32;
+        // What is left of a line is kept for the next event, so small touchpad moves add up instead of being lost.
+        let (n, rest) = whole_lines(self.wheel_rest, lines);
+        self.wheel_rest = rest;
         if n == 0 {
             return;
         }
@@ -158,4 +162,32 @@ impl EntityInputHandler for DroverApp {
     fn character_index_for_point(&mut self, _: gpui::Point<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<usize> {
         None
     }
+}
+
+/// Lines per notch the system has already applied to the event (Windows: its "wheel scroll lines" setting, 3 by default).
+const SYSTEM_NOTCH_LINES: f32 = if cfg!(windows) { 3.0 } else { 1.0 };
+
+/// The whole lines in `rest + lines` (towards zero), and what is left over.
+fn whole_lines(rest: f32, lines: f32) -> (i32, f32) {
+    let total = rest + lines;
+    let n = total.trunc();
+    (n as i32, total - n)
+}
+
+#[cfg(test)]
+mod wheel_tests {
+    use super::*;
+
+    #[test]
+    fn small_moves_add_up_instead_of_vanishing() {
+        let (mut rest, mut scrolled) = (0.0, 0);
+        for _ in 0..10 {
+            let (n, r) = whole_lines(rest, 0.3);
+            rest = r;
+            scrolled += n;
+        }
+        assert_eq!(scrolled, 3);
+        assert_eq!(whole_lines(0.0, -2.6).0, -2);
+    }
+
 }
