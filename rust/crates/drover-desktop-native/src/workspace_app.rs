@@ -130,6 +130,8 @@ pub struct DroverApp {
     pub mouse_last: Option<(String, usize, usize)>,
     /// A press in a program that tracks clicks only, held until release: sent as a click if nothing got selected.
     pub mouse_click: Option<(String, usize, usize)>,
+    /// Text a program copied with OSC 52, waiting for the drain loop to put it on the clipboard.
+    pub copied_out: Option<String>,
     pub daemon_font: (String, f32),
     pub font_form: crate::views::settings_look::FontForm,
     /// The multi-line editor of Settings (one file at a time).
@@ -147,7 +149,13 @@ impl DroverApp {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_millis(16)).await;
-                let Ok(changed) = this.update(cx, |app, _| app.drain()) else { break };
+                let Ok(changed) = this.update(cx, |app, cx| {
+                    let changed = app.drain();
+                    if let Some(text) = app.copied_out.take() {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                    }
+                    changed
+                }) else { break };
                 if changed {
                     let _ = this.update(cx, |_, cx| cx.notify());
                 }
@@ -184,7 +192,7 @@ impl DroverApp {
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
                     chord: false, show_shortcuts: false, picker: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
-                    toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), folds: Default::default(), sidebar_scroll: [gpui::ScrollHandle::new(), gpui::ScrollHandle::new()], base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, mouse_click: None, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
+                    toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), folds: Default::default(), sidebar_scroll: [gpui::ScrollHandle::new(), gpui::ScrollHandle::new()], base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, mouse_click: None, copied_out: None, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 
     fn drain(&mut self) -> bool {
@@ -243,6 +251,11 @@ impl DroverApp {
             // Answers go back to the program, except while replaying old output (the question is long past).
             for data in replies.into_iter().filter(|_| !replay) {
                 let _ = self.client.commands.send(Command::Input { pane: pane.to_string(), data });
+            }
+            // Text the program copied (OSC 52: Claude Code copies its own mouse selection that way); the drain loop
+            // puts it on the clipboard. A replay repeats copies made long ago: those are skipped.
+            if let Some(text) = s.take_copied().filter(|_| !replay) {
+                self.copied_out = Some(text);
             }
         }
         if replay && let Some(t) = self.last_switch {
