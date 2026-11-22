@@ -74,9 +74,9 @@ pub fn shown(app: &DroverApp, cx: &gpui::App) -> (Option<String>, String, Option
     // The focused pane's worktree (set from git.info), or one picked in the Worktrees tab.
     let path = app.changes.picked_path.clone().or_else(|| changes::shown_path(None, trees));
     let base = changes::base(&app.changes_in.base.read(cx).text, trees);
+    // Only a file the user opened (the list shows until then), and only while it still has changes.
     let file = match &app.changes.files {
-        Some(Ok(files)) => app.changes.picked_file.clone().filter(|f| files.iter().any(|x| &x.path == f))
-            .or_else(|| files.first().map(|f| f.path.clone())),
+        Some(Ok(files)) => app.changes.picked_file.clone().filter(|f| files.iter().any(|x| &x.path == f)),
         _ => None,
     };
     (path, base, file)

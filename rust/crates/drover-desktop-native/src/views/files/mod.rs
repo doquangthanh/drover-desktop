@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use drover_proto::changes::{self, DiffRow};
-use gpui::{Context, Div, div, prelude::*, relative};
+use gpui::{Context, Div, div, prelude::*};
 use serde_json::{Value, json};
 
 use crate::views::{View, ui};
@@ -115,15 +115,18 @@ impl DroverApp {
                     self.files.show_diff = false;
                     self.files_load_file(false);
                 }
-                None => { // clicked the file that is open: close it
-                    self.files.file = None;
-                    self.files.content = None;
-                    self.files.diff = None;
-                    self.files.show_diff = false;
-                }
+                None => self.files_close_file(), // clicked the file that is open: close it
             }
         }
         cx.notify();
+    }
+
+    /// Back to the tree from the opened file.
+    pub fn files_close_file(&mut self) {
+        self.files.file = None;
+        self.files.content = None;
+        self.files.diff = None;
+        self.files.show_diff = false;
     }
 
     /// Poll git status; on a change reload the open folders and the shown file.
@@ -165,7 +168,7 @@ pub fn tick(app: &mut DroverApp) -> bool {
     false
 }
 
-/// The panel: the tree on top, the picked file below it.
+/// The panel: the whole tree, or the opened file on its own ("← Files" goes back to the tree).
 pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     if let Some(e) = &app.files.error {
         return ui::note(e.clone(), true);
@@ -173,11 +176,11 @@ pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     if !app.files.dirs.contains_key("") {
         return ui::note("Loading files…", false);
     }
+    if app.files.file.is_some() {
+        return content::panel(app, cx);
+    }
     let name = crate::widgets::short_path(&app.files.cwd);
-    div().flex().flex_col().flex_1().min_h_0()
-        .child(div().flex().flex_col().min_h_0().when(app.files.file.is_some(), |d| d.h(relative(0.42)).flex_none()).when(app.files.file.is_none(), |d| d.flex_1())
-            .border_b_1().border_color(crate::theme::border()).child(tree::panel(app, &name, cx)))
-        .when(app.files.file.is_some(), |d| d.child(content::panel(app, cx)))
+    div().flex().flex_col().flex_1().min_h_0().child(tree::panel(app, &name, cx))
 }
 
 /// The file to show after a click on `clicked`: that file, or None when it was already the open one (a second click closes it).

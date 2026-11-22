@@ -6,7 +6,7 @@ use std::sync::Arc;
 use gpui::{ClipboardItem, Context, Div, MouseButton, SharedString, div, prelude::*, rgb, uniform_list};
 use crate::ui_scale::px;
 
-use crate::theme::{self, accent, dim, fg};
+use crate::theme::{self, dim, fg};
 use crate::views::changes::diff_view;
 use crate::views::ui::{self, Kind};
 use crate::workspace_app::DroverApp;
@@ -32,8 +32,9 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let changed = app.files.diff.is_some();
     let show_diff = app.files.show_diff && changed;
     let family = app.code_family.clone();
-    let mut head = div().h(px(42.)).flex_none().flex().items_center().gap(px(6.)).px(px(12.)).border_b_1().border_color(theme::border())
-        .child(div().flex_1().min_w_0().truncate().font_family(family.clone()).text_color(rgb(accent())).child(file.clone()));
+    let back = ui::back_header("Files", file.clone(), cx.listener(|app, _, _, cx| { app.files_close_file(); cx.notify(); }));
+    // File / Diff and the buttons, on their own row under "← Files" (the panel is narrow).
+    let mut head = div().h(px(38.)).flex_none().flex().items_center().gap(px(6.)).px(px(12.)).border_b_1().border_color(theme::border());
     if changed {
         for (label, diff) in [("File", false), ("Diff", true)] {
             head = head.child(ui::tab(label, show_diff == diff).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {
@@ -43,7 +44,7 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         }
     }
     let text = match &app.files.content { Some(Ok((c, _))) => c.text.clone(), _ => None };
-    head = head
+    head = head.child(div().flex_1())
         .when_some(text, |d, text| d.child(ui::button("Copy file", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |_, _, _, cx| {
             cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
         }))))
@@ -63,5 +64,5 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
             Some(Ok((_, lines))) => text_view(lines.clone(), family),
         }
     };
-    div().flex().flex_col().flex_1().min_h_0().min_w_0().child(head).child(body)
+    div().flex().flex_col().flex_1().min_h_0().min_w_0().child(back).child(head).child(body)
 }
