@@ -446,21 +446,24 @@ impl Render for DroverApp {
             _ => {}
         }
         crate::views::panel::refresh(self, cx);
+        // The tab bar stays outside the focus-tracking area: a click there would focus it and mark the press as handled,
+        // and Windows then ignores it on the window buttons (minimize / maximize / close) and the drag area (topbar.rs).
         let main = div()
             .flex()
             .flex_col()
             .flex_1()
             .min_w_0()
-            .track_focus(&self.term_focus)
-            .on_key_down(cx.listener(Self::on_key))
             .child(topbar::tab_bar(self, window.is_maximized(), cx))
-            .child(if self.view == View::Terminals {
-                div().flex().flex_row().flex_1().min_h_0().min_w_0()
-                    .child(layout_view::tab_body(self, cx))
-                    .children(crate::views::panel::panel(self, cx))
-            } else {
-                views::body(self, cx)
-            });
+            .child(div().flex().flex_col().flex_1().min_h_0().min_w_0()
+                .track_focus(&self.term_focus)
+                .on_key_down(cx.listener(Self::on_key))
+                .child(if self.view == View::Terminals {
+                    div().flex().flex_row().flex_1().min_h_0().min_w_0()
+                        .child(layout_view::tab_body(self, cx))
+                        .children(crate::views::panel::panel(self, cx))
+                } else {
+                    views::body(self, cx)
+                }));
         if self.connected && !self.keymap_loaded {
             self.keymap_loaded = true;
             self.load_keymap(false);
