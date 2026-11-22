@@ -20,5 +20,5 @@ toml = "0.8"  # plugin manifests (plugins.rs); already in the lock
 base64 = "0.22"  # Kitty graphics payloads (kitty_graphics.rs)
 flate2 = "1"  # o=z compressed images; already in the lock
 image = { version = "0.25", default-features = false, features = ["png"] }  # same crate gpui paints with
-drover-core = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.14" }
-drover-proto = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.14" }
+drover-core = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.15" }
+drover-proto = { git = "https://github.com/doquangthanh/drover-core", tag = "v0.2.15" }
