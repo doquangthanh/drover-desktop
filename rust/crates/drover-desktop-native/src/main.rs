@@ -1,4 +1,7 @@
 //! drover native desktop app (GPUI). One more client of drover-server, like the web UI and `dr tui`.
+// Windows: a GUI program, not a console one, or Windows opens an extra console window next to Drover when
+// drover.exe (itself console-less) starts it. Like the Tauri window in drover-web.
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod actions;
 mod assets;
