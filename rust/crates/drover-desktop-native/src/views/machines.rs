@@ -97,13 +97,20 @@ pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         };
         let snap = &m["snapshot"];
         let count = |k: &str| snap[k].as_array().map(|a| a.len()).unwrap_or(0);
-        let a = alias.clone();
+        let (a, rename_alias, test_alias) = (alias.clone(), alias.clone(), alias.clone());
+        let target = m["target"].as_str().unwrap_or("").to_string();
         grid = grid.child(card(&alias, "server", pill)
             .child(div().text_size(px(12.)).text_color(rgb(dim())).child(if on {
                 format!("dr {} · {} spaces · {} agents", m["info"]["version"].as_str().unwrap_or("?"), count("spaces"), count("panes"))
             } else { m["error"].as_str().unwrap_or("Agents there keep running; you'll see them when it's back.").to_string() }))
             .child(div().text_size(px(12.)).text_color(rgb(dim())).font_family(app.code_family.clone()).child(m["target"].as_str().unwrap_or("").to_string()))
-            .child(div().flex().child(ui::button("Remove", Kind::Danger).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.ask_remove_machine(a.clone(), cx))))));
+            .child(div().flex().gap(px(8.))
+                .child(ui::button("Test", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {
+                    app.test_saved_machine(test_alias.clone(), target.clone());
+                    cx.notify();
+                })))
+                .child(ui::button("Rename", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| app.open_rename_machine(rename_alias.clone(), window, cx))))
+                .child(ui::button("Remove", Kind::Danger).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.ask_remove_machine(a.clone(), cx))))));
     }
     let f = &app.machines_form;
     let mut log = div().flex().flex_col().gap(px(3.)).text_size(px(12.));

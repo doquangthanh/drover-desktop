@@ -111,7 +111,8 @@ fn selection_color() -> Hsla {
 /// (for the IME candidate window).
 #[allow(clippy::too_many_arguments)]
 pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused: bool, marked: Option<&str>,
-             link: Option<(i32, std::ops::Range<usize>)>, window: &mut Window, cx: &mut App) -> Bounds<Pixels> {
+             link: Option<(i32, std::ops::Range<usize>)>, images: Option<&crate::kitty_graphics::Graphics>,
+             window: &mut Window, cx: &mut App) -> Bounds<Pixels> {
     let ts = window.text_system().clone();
     let tf = &resolved(tf, window);
     let cell_w = cell_width(tf, window);
@@ -121,6 +122,9 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
     let (rows, cols) = (grid.screen_lines(), grid.columns());
     let offset = grid.display_offset() as i32;
     let selection = term.selection.as_ref().and_then(|s| s.to_range(term));
+    if let Some(images) = images {
+        images.paint(screen, bounds, cell_w, lh, window); // under the text
+    }
     for r in 0..rows {
         let y = bounds.origin.y + lh * r as f32;
         if y > bounds.origin.y + bounds.size.height {

@@ -72,6 +72,7 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
     let focused = app.focused.as_deref() == Some(pane_id);
     let id = pane_id.to_string();
     let (screens, tf, switched, sizes) = (app.screens.clone(), app.term_font.clone(), app.switched_at.clone(), app.sizes.clone());
+    let graphics = app.graphics.clone();
     let (commands, cursor_at, focus) = (app.client.commands.clone(), app.cursor_bounds.clone(), app.term_focus.clone());
     let marked = if focused { app.marked.clone() } else { None };
     let link = app.hover_link.as_ref().filter(|l| l.pane == pane_id).map(|l| (l.line, l.cols.clone()));
@@ -80,13 +81,17 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
     let resize_sent = app.resize_sent.clone();
     let (sel_down, sel_move, sel_up) = (id.clone(), id.clone(), id.clone());
     let entity = cx.entity();
-    let (click_id, wheel_id) = (id.clone(), id.clone());
+    let (click_id, wheel_id, menu_id) = (id.clone(), id.clone(), id.clone());
     let (split_id, down_id, zoom_id, close_id) = (id.clone(), id.clone(), id.clone(), id.clone());
     let hbtn = |n: &str| div().size(px(22.)).rounded(px(5.)).flex().items_center().justify_center()
         .hover(|d| d.bg(theme::hover())).child(icon(n, 13., dim()));
     div().flex().flex_col().flex_1().min_w_0().min_h_0().rounded(px(10.)).overflow_hidden()
         .border_1().when(focused, |d| d.border_color(rgb(accent()))).when(!focused, |d| d.border_color(theme::border())).bg(rgb(pane()))
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| app.focus_pane(click_id.clone(), window, cx)))
+        .on_mouse_down(MouseButton::Right, cx.listener(move |app, ev: &gpui::MouseDownEvent, window, cx| {
+            app.focus_pane(menu_id.clone(), window, cx);
+            app.open_menu(ev.position, crate::context_menu::pane_items(&menu_id, true), cx);
+        }))
         .on_scroll_wheel(cx.listener(move |app, ev, _, cx| app.on_wheel(&wheel_id, ev, cx)))
         .child(div().h(px(30.)).flex_none().flex().items_center().gap(px(8.)).pl(px(10.)).pr(px(6.))
             .border_b_1().border_color(theme::border()).text_size(px(12.)).font_family(theme::UI_FONT)
@@ -125,7 +130,8 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
                 window.handle_input(&focus, ElementInputHandler::new(bounds, entity.clone()), cx);
             }
             if let Some(screen) = screens.lock().unwrap().get(&id) {
-                let cursor = terminal_paint::paint(screen, &tf, bounds, focused, marked.as_deref(), link.clone(), window, cx);
+                let images = graphics.lock().unwrap();
+                let cursor = terminal_paint::paint(screen, &tf, bounds, focused, marked.as_deref(), link.clone(), images.get(&id), window, cx);
                 if focused {
                     *cursor_at.lock().unwrap() = Some(cursor);
                 }

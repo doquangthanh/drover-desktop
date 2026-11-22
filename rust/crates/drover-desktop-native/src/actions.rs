@@ -31,6 +31,7 @@ pub enum Then {
     RemoveMachine(String),
     UpdateApply(String),
     StopServer,
+    InstallPlugin(String),
 }
 
 /// What to do with an rpc reply when it arrives (checked by the drain loop).
@@ -115,6 +116,7 @@ impl DroverApp {
         self.space = Some(p.space_id.clone());
         self.tab = Some(p.tab_id.clone());
         self.focused = Some(pane.to_string());
+        self.area = crate::workspace_app::Area::Pane;
         self.sizes.lock().unwrap().remove(pane);
         self.rpc("pane.focus", json!({"pane": pane}));
     }
@@ -212,6 +214,7 @@ impl DroverApp {
                 Then::StopSubtree(id) => self.rpc("pane.close", json!({"pane": id, "subtree": true})),
                 Then::RemoveMachine(alias) => self.rpc("machine.remove", json!({"alias": alias})),
                 Then::StopServer => self.rpc("server.stop", json!({})),
+                Then::InstallPlugin(url) => self.install_plugin(url),
                 Then::UpdateApply(tag) => {
                     self.settings.update = Some(Err("Updating: the server restarts…".into()));
                     self.rpc_reply("update.apply", json!({"tag": tag}), |app, r| {

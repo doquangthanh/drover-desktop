@@ -10,9 +10,9 @@ use crate::views::View;
 use crate::workspace_app::DroverApp;
 
 /// Shown by Ctrl+K Ctrl+S (dialogs.rs).
-pub const SHORTCUTS: [(&str, &str); 28] = [
-    ("Ctrl+Shift+P · F1", "All commands"), ("Ctrl+P", "Jump to a terminal or agent"), ("F2", "Rename the focused agent"),
-    ("Ctrl+F", "Find in the focused terminal"),
+pub const SHORTCUTS: [(&str, &str); 29] = [
+    ("Ctrl+Shift+P · F1", "All commands"), ("Ctrl+P", "Jump to a terminal or agent"), ("F2", "Rename what you picked: space, tab or agent"),
+    ("Ctrl+F", "Find in the focused terminal"), ("Ctrl+K [", "Copy mode: hjkl move · v V select · y copy · Esc"),
     ("Ctrl+B", "Toggle sidebar"), ("Ctrl+,", "Settings"), ("Ctrl+K Ctrl+S", "Keyboard shortcuts"),
     ("Ctrl+= · Ctrl+- · Ctrl+0", "Terminal text bigger · smaller · normal"), ("Ctrl+Alt+= · Ctrl+Alt+- · Ctrl+Alt+0", "Interface bigger · smaller · normal"), ("Ctrl+N · Ctrl+Shift+`", "New tab"), ("Ctrl+W", "Close tab"), ("Ctrl+Tab · Ctrl+PageDown", "Next tab"),
     ("Ctrl+Shift+Tab · Ctrl+PageUp", "Previous tab"), ("Alt+1–9", "Go to tab 1–9"),
@@ -37,6 +37,12 @@ impl DroverApp {
             cx.notify();
             return true;
         }
+        // Your own shortcuts (keymap.rs) come before the built-in ones.
+        match self.keymap.get(ev) {
+            Some(crate::keymap::Binding::Cmd(cmd)) => { self.run_cmd(cmd, window, cx); return true; }
+            Some(crate::keymap::Binding::Plugin(action)) => { self.run_plugin_action(&action); cx.notify(); return true; }
+            None => {}
+        }
         if m.control && !m.shift && !m.alt && key == "k" {
             self.chord = true;
             cx.notify();
@@ -46,7 +52,7 @@ impl DroverApp {
         match (m.control, m.shift, m.alt, key) {
             (_, _, _, "f1") | (true, true, false, "p") => self.open_picker(crate::picker::Kind::Commands, window, cx),
             (true, false, false, "p") => self.open_picker(crate::picker::Kind::Jump, window, cx),
-            (false, false, false, "f2") => self.open_picker(crate::picker::Kind::Rename, window, cx),
+            (false, false, false, "f2") => self.rename_picked(window, cx),
             (true, false, false, "f") => self.open_picker(crate::picker::Kind::Find, window, cx),
             (_, false, _, "f8") => self.next_with_state("blocked", window, cx),
             (_, true, _, "f8") => self.next_with_state("done", window, cx),
@@ -85,6 +91,7 @@ impl DroverApp {
             "right" => self.swap_focused(1),
             "\\" | "|" if ctrl => self.split_focused("col"),
             "s" if ctrl => self.show_shortcuts = true,
+            "[" if !ctrl => self.enter_copy_mode(cx),
             "m" if ctrl => { if let Some(p) = self.focused.clone() { self.toggle_zoom(&p) } }
             "w" if !ctrl => { if let Some(p) = self.focused.clone() { self.ask_close_pane(&p, cx) } }
             _ => {}
