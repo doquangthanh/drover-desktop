@@ -221,8 +221,11 @@ impl DroverApp {
                 Then::InstallPlugin(url) => self.install_plugin(url),
                 Then::UpdateApply(tag) => {
                     self.settings.update = Some(Err("Updating: the server restarts…".into()));
-                    self.rpc_reply("update.apply", json!({"tag": tag}), |app, r| {
-                        if let Err(e) = r { app.settings.update = Some(Err(format!("Update failed: {e}"))); }
+                    // The update replaces this program's file too: once it succeeded, the drain loop starts the new one
+                    // and closes this window (else the old code keeps running until Drover is reopened by hand).
+                    self.rpc_reply("update.apply", json!({"tag": tag}), |app, r| match r {
+                        Ok(_) => app.relaunch = true,
+                        Err(e) => app.settings.update = Some(Err(format!("Update failed: {e}"))),
                     });
                 }
             }

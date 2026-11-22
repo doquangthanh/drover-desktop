@@ -132,6 +132,8 @@ pub struct DroverApp {
     pub mouse_click: Option<(String, usize, usize)>,
     /// Text a program copied with OSC 52, waiting for the drain loop to put it on the clipboard.
     pub copied_out: Option<String>,
+    /// The in-app update succeeded: the drain loop starts the new program and closes this window.
+    pub relaunch: bool,
     pub daemon_font: (String, f32),
     pub font_form: crate::views::settings_look::FontForm,
     /// The multi-line editor of Settings (one file at a time).
@@ -143,6 +145,15 @@ pub struct DroverApp {
 }
 
 impl DroverApp {
+    /// After an in-app update this program's file on disk is the new version: start it, then close this window. The
+    /// new window waits for the restarting daemon like any reconnect. If it cannot start, say how to finish by hand.
+    fn relaunch_updated(&mut self, cx: &mut Context<Self>) {
+        match std::env::current_exe().and_then(|exe| std::process::Command::new(exe).spawn()) {
+            Ok(_) => cx.quit(),
+            Err(e) => self.settings.update = Some(Err(format!("Updated. Close and reopen Drover to use the new version ({e})."))),
+        }
+    }
+
     pub fn new(cx: &mut Context<Self>) -> Self {
         let client = client::start(|| {});
         // The client thread fills a channel; drain it about 60 times a second, repaint only on change.
@@ -153,6 +164,9 @@ impl DroverApp {
                     let changed = app.drain();
                     if let Some(text) = app.copied_out.take() {
                         cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+                    }
+                    if std::mem::take(&mut app.relaunch) {
+                        app.relaunch_updated(cx);
                     }
                     changed
                 }) else { break };
@@ -192,7 +206,7 @@ impl DroverApp {
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
                     chord: false, show_shortcuts: false, picker: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
-                    toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), folds: Default::default(), sidebar_scroll: [gpui::ScrollHandle::new(), gpui::ScrollHandle::new()], base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, mouse_click: None, copied_out: None, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
+                    toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), folds: Default::default(), sidebar_scroll: [gpui::ScrollHandle::new(), gpui::ScrollHandle::new()], base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, mouse_click: None, copied_out: None, relaunch: false, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 
     fn drain(&mut self) -> bool {
@@ -434,7 +448,7 @@ impl Render for DroverApp {
             .min_w_0()
             .track_focus(&self.term_focus)
             .on_key_down(cx.listener(Self::on_key))
-            .child(topbar::tab_bar(self, cx))
+            .child(topbar::tab_bar(self, window.is_maximized(), cx))
             .child(if self.view == View::Terminals {
                 div().flex().flex_row().flex_1().min_h_0().min_w_0()
                     .child(layout_view::tab_body(self, cx))

@@ -1,6 +1,6 @@
 //! Tab bar (`.tabs`, `.tab`, `.pb` in workspace.css) and status bar (`.status`).
 
-use gpui::{Context, Div, FontWeight, MouseButton, div, prelude::*, rgb};
+use gpui::{Context, Div, FontWeight, MouseButton, WindowControlArea, div, prelude::*, rgb};
 use crate::ui_scale::px;
 
 use crate::theme::{self, accent, chrome, dim, done, error, fg, muted, raised, UI_FONT, tint};
@@ -15,7 +15,7 @@ fn pb(view: View, on: bool) -> Div {
         .child(view.title())
 }
 
-pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
+pub fn tab_bar(app: &DroverApp, maximized: bool, cx: &mut Context<DroverApp>) -> Div {
     let mut bar = div().h(px(42.)).flex_none().flex().items_center().gap(px(3.)).pl(px(10.)).pr(px(8.))
         .bg(rgb(chrome())).border_b_1().border_color(theme::border()).font_family(UI_FONT);
     if let Some(space) = app.space.as_deref() {
@@ -54,7 +54,8 @@ pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     }
     let toggle = |view: View| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, _: &mut gpui::Window, cx: &mut Context<DroverApp>| app.toggle_panel(view, cx));
     let open = |view: View| app.view == View::Terminals && app.panel() == Some(view);
-    bar.child(div().flex_1())
+    // The empty middle moves the window (and a double click maximizes) once the system title bar is hidden.
+    bar.child(div().flex_1().h_full().when(CUSTOM_TITLEBAR, |d| d.window_control_area(WindowControlArea::Drag)))
         .child(div().flex().items_center().gap(px(2.))
             .child(div().size(px(26.)).rounded(px(6.)).flex().items_center().justify_center().hover(|d| d.bg(theme::hover()))
                 .child(icon("sidebar", 15., dim()))
@@ -62,6 +63,30 @@ pub fn tab_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
             .child(pb(View::Agents, open(View::Agents)).on_mouse_down(MouseButton::Left, toggle(View::Agents)))
             .child(pb(View::Files, open(View::Files)).on_mouse_down(MouseButton::Left, toggle(View::Files)))
             .child(pb(View::Changes, open(View::Changes)).on_mouse_down(MouseButton::Left, toggle(View::Changes))))
+        .when(CUSTOM_TITLEBAR, |d| d.pr_0().child(window_controls(maximized)))
+}
+
+/// On Windows the white system title bar is hidden (main.rs) and the window is moved, maximized and closed from the
+/// app's own top bar, as Herdr does. Elsewhere the system keeps its title bar (gpui draws no frame there).
+pub const CUSTOM_TITLEBAR: bool = cfg!(windows);
+
+/// Minimize, maximize / restore and close at the right end of the tab bar. Windows handles their clicks itself
+/// through `window_control_area`, as on its own title bar (snap layouts on hovering maximize included).
+fn window_controls(maximized: bool) -> Div {
+    let cell = |area| div().w(px(46.)).h_full().flex().items_center().justify_center().window_control_area(area);
+    let outline = || div().border_1().border_color(rgb(muted()));
+    let max_glyph = if maximized {
+        // Restore: two overlapping squares.
+        div().relative().size(px(10.))
+            .child(div().absolute().top_0().right_0().size(px(8.)).border_t_1().border_r_1().border_color(rgb(muted())))
+            .child(outline().absolute().bottom_0().left_0().size(px(8.)))
+    } else {
+        outline().size(px(10.))
+    };
+    div().h_full().flex().flex_none().ml(px(6.))
+        .child(cell(WindowControlArea::Min).hover(|d| d.bg(theme::hover())).child(div().w(px(10.)).h(px(1.)).bg(rgb(muted()))))
+        .child(cell(WindowControlArea::Max).hover(|d| d.bg(theme::hover())).child(max_glyph))
+        .child(cell(WindowControlArea::Close).hover(|d| d.bg(rgb(0xc42b1c))).child(icon("close", 14., muted())))
 }
 
 pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {

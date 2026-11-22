@@ -24,6 +24,7 @@ mod picker;
 mod powerline;
 mod sidebar;
 mod sidebar_fold;
+mod space_tree;
 mod scrollbar;
 mod terminal_input;
 mod terminal_mouse;
@@ -52,7 +53,8 @@ fn main() {
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
-                titlebar: Some(TitlebarOptions { title: Some("Drover".into()), ..Default::default() }),
+                // Windows: no white system title bar; the tab bar carries minimize / maximize / close (topbar.rs).
+                titlebar: Some(TitlebarOptions { title: Some("Drover".into()), appears_transparent: topbar::CUSTOM_TITLEBAR, ..Default::default() }),
                 // WM_CLASS (X11) / app_id (Wayland) = the desktop entry's name, so the dock shows Drover's icon.
                 app_id: Some("drover".into()),
                 ..Default::default()

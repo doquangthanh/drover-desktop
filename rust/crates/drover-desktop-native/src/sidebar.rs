@@ -52,12 +52,13 @@ fn space_group(app: &DroverApp, key: String, head: (&str, String, bool), extra: 
     let folded = app.is_folded(&key, app.store.spaces.len(), AUTO_FOLD_SPACES, keep_open);
     let head = group_head(head.0, head.1, head.2, extra, folded, list.len())
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.toggle_fold(key.clone(), folded, cx)));
-    div().flex().flex_col().child(head).when(!folded, |d| d.children(list.into_iter().map(|s| space_row(app, s, cx))))
+    // A worktree space sits under its repository's space, indented with a branch mark (space_tree.rs).
+    div().flex().flex_col().child(head).when(!folded, |d| d.children(crate::space_tree::ordered(&list).into_iter().map(|(s, nested)| space_row(app, s, nested, cx))))
 }
 
 /// One space row: the columns the user asked for (ui_config.rs) in their order; click selects, double click renames,
 /// middle click / × closes, right click opens the menu.
-fn space_row(app: &DroverApp, s: &drover_proto::wire::Space, cx: &mut Context<DroverApp>) -> Div {
+fn space_row(app: &DroverApp, s: &drover_proto::wire::Space, nested: bool, cx: &mut Context<DroverApp>) -> Div {
     let on = app.space.as_deref() == Some(s.id.as_str());
     let (id, close_id, middle_id, menu_id) = (s.id.clone(), s.id.clone(), s.id.clone(), s.id.clone());
     let state = app.store.space_state(&s.id).to_string();
@@ -67,9 +68,10 @@ fn space_row(app: &DroverApp, s: &drover_proto::wire::Space, cx: &mut Context<Dr
         .hover(|d| d.bg(theme::hover()))
         .child(icon("close", 11., dim()))
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_space(&close_id, cx); }));
-    let mut row = srow(on);
+    let mut row = srow(on).when(nested, |d| d.pl(px(26.)));
     for col in &app.ui.space_row {
         row = match col {
+            SpaceCol::Avatar if nested => row.child(icon("branch", 13., dim())),
             SpaceCol::Avatar => row.child(avatar(&s.name, s.color)),
             SpaceCol::Name => row.child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(s.name.clone())),
             SpaceCol::Branch => row.children(s.branch.as_ref().map(|b| small().max_w(px(130.)).truncate().child(b.clone()))),
@@ -92,7 +94,9 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let logo = Arc::new(Image::from_bytes(ImageFormat::Png, crate::assets::LOGO.to_vec()));
     let brand = div().h(px(46.)).flex_none().flex().items_center().gap(px(8.)).pl(px(14.)).pr(px(10.))
         .child(img(logo).size(px(22.)).flex_none())
-        .child(div().flex_1().font_weight(FontWeight::SEMIBOLD).text_size(px(13.5)).child("Drover"))
+        // The brand row also moves the window when the system title bar is hidden (topbar.rs).
+        .child(div().flex_1().h_full().flex().items_center().font_weight(FontWeight::SEMIBOLD).text_size(px(13.5)).child("Drover")
+            .when(crate::topbar::CUSTOM_TITLEBAR, |d| d.window_control_area(gpui::WindowControlArea::Drag)))
         .child(ibtn("search").on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, _| app.open_web(""))))
         .child(ibtn("sidebar").on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.sidebar_open = false; cx.notify(); })));
 

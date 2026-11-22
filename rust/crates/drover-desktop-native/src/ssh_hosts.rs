@@ -64,10 +64,29 @@ pub fn detect() -> Vec<String> {
     hosts
 }
 
-/// The name a machine gets when none is typed: the host part of `user@host`, safe as a file key.
-pub fn alias_for(target: &str) -> String {
-    let host = target.rsplit('@').next().unwrap_or(target);
-    host.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '-' }).collect()
+/// The name a machine gets when none is typed: the host part of `user@host`, made to pass the daemon's rule
+/// (lowercase letters, digits, - and _, up to 32, starting with a letter or digit; machines_edit::alias_ok):
+/// `Box.Example` -> `box-example`, `100.65.65.71` -> `100-65-65-71`. `taken` names get -2, -3…
+pub fn alias_for(target: &str, taken: &[&str]) -> String {
+    let host = target.rsplit('@').next().unwrap_or(target).to_ascii_lowercase();
+    let mut base = String::new();
+    for c in host.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '-' }) {
+        if !(c == '-' && (base.is_empty() || base.ends_with('-'))) {
+            base.push(c);
+        }
+    }
+    let mut base: String = base.trim_matches(|c| c == '-' || c == '_').chars().take(28).collect();
+    // Names the daemon keeps for itself, or that read like its internal ids (s1, t3, a2).
+    let internal = base.len() > 1 && base.starts_with(['s', 't', 'a']) && base[1..].chars().all(|c| c.is_ascii_digit());
+    if base.is_empty() || ["local", "self", "this"].contains(&base.as_str()) || internal {
+        base = format!("machine-{base}").trim_end_matches('-').to_string();
+    }
+    let mut name = base.clone();
+    for n in 2.. {
+        if !taken.contains(&name.as_str()) { break }
+        name = format!("{base}-{n}");
+    }
+    name
 }
 
 #[cfg(test)]
@@ -87,9 +106,23 @@ mod tests {
     }
 
     #[test]
-    fn alias_comes_from_the_host() {
-        assert_eq!(alias_for("deploy@vps-2.tail-net"), "vps-2.tail-net");
-        assert_eq!(alias_for("workbox"), "workbox");
-        assert_eq!(alias_for("me@[::1]"), "---1-");
+    fn alias_comes_from_the_host_and_passes_the_daemon_rule() {
+        assert_eq!(alias_for("deploy@vps-2.tail-net", &[]), "vps-2-tail-net");
+        assert_eq!(alias_for("workbox", &[]), "workbox");
+        assert_eq!(alias_for("100.65.65.71", &[]), "100-65-65-71");
+        assert_eq!(alias_for("me@Box.Example.COM", &[]), "box-example-com");
+        assert_eq!(alias_for("me@[::1]", &[]), "1");
+        assert_eq!(alias_for("local", &[]), "machine-local");
+        assert_eq!(alias_for("s12", &[]), "machine-s12");
+        assert_eq!(alias_for("@", &[]), "machine");
+        for host in ["deploy@vps-2.tail-net", "100.65.65.71", "me@[::1]", "local", "x".repeat(60).as_str()] {
+            assert!(crate::machines_edit::alias_ok(&alias_for(host, &[])), "{host}");
+        }
+    }
+
+    #[test]
+    fn a_taken_name_gets_a_number() {
+        assert_eq!(alias_for("u@box", &["box"]), "box-2");
+        assert_eq!(alias_for("u@box", &["box", "box-2"]), "box-3");
     }
 }

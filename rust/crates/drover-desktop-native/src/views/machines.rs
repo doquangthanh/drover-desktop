@@ -48,7 +48,8 @@ impl DroverApp {
         let f = &self.machines_form;
         let t = |e: &Entity<TextInput>| e.read(cx).text.trim().to_string();
         let target = t(&f.target);
-        let alias = Some(t(&f.alias)).filter(|a| !a.is_empty()).unwrap_or_else(|| crate::ssh_hosts::alias_for(&target));
+        let taken: Vec<&str> = self.store.machines.as_array().into_iter().flatten().filter_map(|m| m["alias"].as_str()).collect();
+        let alias = Some(t(&f.alias)).filter(|a| !a.is_empty()).unwrap_or_else(|| crate::ssh_hosts::alias_for(&target, &taken));
         json!({"alias": alias, "target": target, "port": t(&f.port).parse::<u16>().unwrap_or(22), "key": t(&f.key)})
     }
 
