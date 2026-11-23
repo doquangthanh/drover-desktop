@@ -40,9 +40,10 @@ mod ui_scale;
 mod topbar;
 mod views;
 mod widgets;
+mod window_controls;
 mod workspace_app;
 
-use gpui::{App, Application, Bounds, TitlebarOptions, WindowBounds, WindowOptions, prelude::*, px, size};
+use gpui::{App, Application, Bounds, TitlebarOptions, WindowBounds, WindowDecorations, WindowOptions, prelude::*, px, size};
 
 use workspace_app::DroverApp;
 
@@ -59,6 +60,8 @@ fn main() {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 // Windows: no white system title bar; the tab bar carries minimize / maximize / close (topbar.rs).
                 titlebar: Some(TitlebarOptions { title: Some("Drover".into()), appears_transparent: topbar::CUSTOM_TITLEBAR, ..Default::default() }),
+                // Linux: the same, with client-side decorations (gpui ignores appears_transparent there).
+                window_decorations: cfg!(target_os = "linux").then_some(WindowDecorations::Client),
                 // WM_CLASS (X11) / app_id (Wayland) = the desktop entry's name, so the dock shows Drover's icon.
                 app_id: Some("drover".into()),
                 ..Default::default()

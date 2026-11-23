@@ -506,5 +506,6 @@ impl Render for DroverApp {
             .child(topbar::status_bar(self, cx))
             .children(crate::toasts::overlay(self, cx))
             .children(overlay)
+            .children(if cfg!(target_os = "linux") { crate::window_controls::resize_edges(cx) } else { Vec::new() })
     }
 }
