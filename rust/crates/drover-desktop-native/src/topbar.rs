@@ -52,10 +52,16 @@ pub fn tab_bar(app: &DroverApp, maximized: bool, cx: &mut Context<DroverApp>) ->
                 .hover(|d| d.bg(theme::hover()).text_color(rgb(fg()))).child(format!("{away} put away"))
                 .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.unsettle_all(cx)))));
     }
+    // Built before `toggle`, which keeps `cx` borrowed.
+    let spacer = div().flex_1().h_full().when(CUSTOM_TITLEBAR, |d| d.window_control_area(WindowControlArea::Drag))
+        .when(cfg!(target_os = "linux"), |d| d.on_mouse_down(MouseButton::Left, cx.listener(|_, ev: &gpui::MouseDownEvent, w, _| {
+            if ev.click_count >= 2 { w.zoom_window() } else { w.start_window_move() }
+        })));
+    let controls = CUSTOM_TITLEBAR.then(|| window_controls(maximized, cx));
     let toggle = |view: View| cx.listener(move |app: &mut DroverApp, _: &gpui::MouseDownEvent, _: &mut gpui::Window, cx: &mut Context<DroverApp>| app.toggle_panel(view, cx));
     let open = |view: View| app.view == View::Terminals && app.panel() == Some(view);
     // The empty middle moves the window (and a double click maximizes) once the system title bar is hidden.
-    bar.child(div().flex_1().h_full().when(CUSTOM_TITLEBAR, |d| d.window_control_area(WindowControlArea::Drag)))
+    bar.child(spacer)
         .child(div().flex().items_center().gap(px(2.))
             .child(div().size(px(26.)).rounded(px(6.)).flex().items_center().justify_center().hover(|d| d.bg(theme::hover()))
                 .child(icon("sidebar", 15., dim()))
@@ -63,17 +69,24 @@ pub fn tab_bar(app: &DroverApp, maximized: bool, cx: &mut Context<DroverApp>) ->
             .child(pb(View::Agents, open(View::Agents)).on_mouse_down(MouseButton::Left, toggle(View::Agents)))
             .child(pb(View::Files, open(View::Files)).on_mouse_down(MouseButton::Left, toggle(View::Files)))
             .child(pb(View::Changes, open(View::Changes)).on_mouse_down(MouseButton::Left, toggle(View::Changes))))
-        .when(CUSTOM_TITLEBAR, |d| d.pr_0().child(window_controls(maximized)))
+        .when(CUSTOM_TITLEBAR, |d| d.pr_0())
+        .children(controls)
 }
 
 /// On Windows the white system title bar is hidden (main.rs) and the window is moved, maximized and closed from the
-/// app's own top bar, as Herdr does. Elsewhere the system keeps its title bar (gpui draws no frame there).
-pub const CUSTOM_TITLEBAR: bool = cfg!(windows);
+/// app's own top bar, as Herdr does. Linux does the same with client-side decorations (main.rs, window_controls.rs).
+/// macOS keeps the system title bar.
+pub const CUSTOM_TITLEBAR: bool = cfg!(any(windows, target_os = "linux"));
 
 /// Minimize, maximize / restore and close at the right end of the tab bar. Windows handles their clicks itself
-/// through `window_control_area`, as on its own title bar (snap layouts on hovering maximize included).
-fn window_controls(maximized: bool) -> Div {
+/// through `window_control_area`, as on its own title bar (snap layouts on hovering maximize included). gpui ignores
+/// `window_control_area` on Linux, so there the cells act on the click themselves.
+fn window_controls(maximized: bool, cx: &mut Context<DroverApp>) -> Div {
+    let linux = cfg!(target_os = "linux");
     let cell = |area| div().w(px(46.)).h_full().flex().items_center().justify_center().window_control_area(area);
+    let min = cx.listener(|_, _, w: &mut gpui::Window, _| w.minimize_window());
+    let max = cx.listener(|_, _, w: &mut gpui::Window, _| w.zoom_window());
+    let close = cx.listener(|_, _, w: &mut gpui::Window, cx| { w.remove_window(); cx.quit(); });
     let outline = || div().border_1().border_color(rgb(muted()));
     let max_glyph = if maximized {
         // Restore: two overlapping squares.
@@ -84,9 +97,12 @@ fn window_controls(maximized: bool) -> Div {
         outline().size(px(10.))
     };
     div().h_full().flex().flex_none().ml(px(6.))
-        .child(cell(WindowControlArea::Min).hover(|d| d.bg(theme::hover())).child(div().w(px(10.)).h(px(1.)).bg(rgb(muted()))))
-        .child(cell(WindowControlArea::Max).hover(|d| d.bg(theme::hover())).child(max_glyph))
-        .child(cell(WindowControlArea::Close).hover(|d| d.bg(rgb(0xc42b1c))).child(icon("close", 14., muted())))
+        .child(cell(WindowControlArea::Min).hover(|d| d.bg(theme::hover())).child(div().w(px(10.)).h(px(1.)).bg(rgb(muted())))
+            .when(linux, |d| d.on_mouse_down(MouseButton::Left, min)))
+        .child(cell(WindowControlArea::Max).hover(|d| d.bg(theme::hover())).child(max_glyph)
+            .when(linux, |d| d.on_mouse_down(MouseButton::Left, max)))
+        .child(cell(WindowControlArea::Close).hover(|d| d.bg(rgb(0xc42b1c))).child(icon("close", 14., muted()))
+            .when(linux, |d| d.on_mouse_down(MouseButton::Left, close)))
 }
 
 pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
