@@ -148,7 +148,8 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
                     AgentCol::Icon => row.child(kind_icon(&p.kind)),
                     AgentCol::Name => row.child(div().flex_1().min_w_0().truncate().when(p.state == "idle", |d| d.text_color(rgb(muted()))).child(p.name.clone())),
                     AgentCol::Age => row.child(div().flex_none().text_size(px(11.)).text_color(rgb(dim())).child(age(p.since))),
-                    AgentCol::State => row.child(state_mark(&p.state, p.exit_code, gpui::SharedString::from(format!("ag-{}", p.id)))),
+                    AgentCol::State => row.when(p.state == "done", |r| r.child(crate::review_banner::review_pill(&p.id, cx)))
+                        .child(state_mark(&p.state, p.exit_code, gpui::SharedString::from(format!("ag-{}", p.id)))),
                 };
             }
             agents = agents.child(row

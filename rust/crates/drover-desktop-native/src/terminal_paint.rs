@@ -28,14 +28,10 @@ impl TermFont {
 
 fn bg_default() -> u32 { crate::theme::pane() }
 fn fg_default() -> u32 { crate::theme::tfg() }
-const ANSI: [u32; 16] = [
-    0x2c2e31, 0xdc8c95, 0xa6bd91, 0xd8be87, 0x96b2d7, 0xb5a2ce, 0x8cbdc3, 0xd2d4d9,
-    0x818793, 0xe8a1a9, 0xb9cfa5, 0xe6cf9c, 0xaec5e4, 0xc8b7de, 0xa3cfd4, 0xf0f0f2,
-];
 
 fn indexed(i: u8) -> u32 {
     match i {
-        0..=15 => ANSI[i as usize],
+        0..=15 => crate::theme::ansi()[i as usize],
         16..=231 => {
             let i = i - 16;
             let level = |v: u8| if v == 0 { 0 } else { 55 + v as u32 * 40 };
@@ -54,7 +50,7 @@ fn color(c: Color, default: u32) -> u32 {
         Color::Indexed(i) => indexed(i),
         Color::Named(NamedColor::Foreground) | Color::Named(NamedColor::BrightForeground) => fg_default(),
         Color::Named(NamedColor::Background) => bg_default(),
-        Color::Named(n) if (n as usize) < 16 => ANSI[n as usize],
+        Color::Named(n) if (n as usize) < 16 => crate::theme::ansi()[n as usize],
         Color::Named(_) => default,
     }
 }

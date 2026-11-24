@@ -91,7 +91,7 @@ impl DroverApp {
             "left" => self.swap_focused(-1),
             "right" => self.swap_focused(1),
             "\\" | "|" if ctrl => self.split_focused("col"),
-            "s" if ctrl => self.show_shortcuts = true,
+            "s" if ctrl => self.open_shortcuts(window, cx),
             "[" if !ctrl => self.enter_copy_mode(cx),
             "p" if !ctrl => self.open_picker(crate::picker::Kind::Peek, window, cx),
             "m" if ctrl => { if let Some(p) = self.focused.clone() { self.toggle_zoom(&p) } }

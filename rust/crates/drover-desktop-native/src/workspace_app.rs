@@ -61,6 +61,10 @@ pub struct DroverApp {
     pub view: View,
     pub agents_filter: Entity<TextInput>,
     pub agents_send: Entity<TextInput>,
+    /// The filter box of the shortcuts sheet.
+    pub shortcuts_filter: Entity<TextInput>,
+    /// Finished-agent banners the user closed: pane id -> the `since` of that "done" (review_banner.rs).
+    pub banner_dismissed: HashMap<String, i64>,
     pub agents: crate::views::agents::AgentsState,
     pub changes: crate::views::changes::ChangesState,
     pub changes_in: crate::views::changes::ChangesInputs,
@@ -180,6 +184,8 @@ impl DroverApp {
         .detach();
         let agents_filter = cx.new(|cx| TextInput::new("Filter agents", cx));
         cx.observe(&agents_filter, |_, _, cx| cx.notify()).detach();
+        let shortcuts_filter = cx.new(|cx| TextInput::new("Filter by name or key", cx));
+        cx.observe(&shortcuts_filter, |_, _, cx| cx.notify()).detach();
         let agents_send = cx.new(|cx| TextInput::new("Send to this agent…", cx));
         cx.subscribe(&agents_send, |app, input, ev, cx| {
             if let crate::views::text_input::InputEvent::Submit = ev {
@@ -201,12 +207,12 @@ impl DroverApp {
                     status: "connecting…".into(), term_font: TermFont::new(&family, 13.0), switched_at: Arc::default(), last_switch: None,
                     focused: None, term_focus: cx.focus_handle(), marked: None, cursor_bounds: Arc::default(),
                     sizes: Arc::default(), resize_sent: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true,
-                    term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter, agents_send,
+                    term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter, agents_send, shortcuts_filter, banner_dismissed: HashMap::new(),
                     agents: Default::default(), changes: Default::default(), changes_in,
                     files: Default::default(), inbox_filter: Default::default(),
                     settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
-                    panel_width: 440., sidebar_width: 260., drag: None, split_bounds: Arc::default(),
+                    panel_width: 440., sidebar_width: crate::theme_data::layout::SIDEBAR_WIDTH, drag: None, split_bounds: Arc::default(),
                     chord: false, show_shortcuts: false, picker: None, peek: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
                     toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), folds: Default::default(), sidebar_scroll: [gpui::ScrollHandle::new(), gpui::ScrollHandle::new()], base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, mouse_click: None, copied_out: None, relaunch: false, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }

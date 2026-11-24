@@ -236,6 +236,12 @@ impl DroverApp {
     }
 
     /// Open a view the native app does not draw yet in the browser, through the web UI.
+    /// Open a file of a space in the web UI's editor, at a line: `#files?space=..&file=..&line=..&col=..`.
+    pub fn open_web_file(&self, space: &str, file: &str, line: Option<u32>, col: Option<u32>) {
+        let Ok((port, token)) = drover_proto::client::daemon_address() else { return };
+        open_in_browser(&web_file_url(port, &token, space, file, line, col));
+    }
+
     pub fn open_web(&self, view: &str) {
         let Ok((port, token)) = drover_proto::client::daemon_address() else { return };
         let hash = if WEB_VIEWS.contains(&view) { format!("#{view}") } else { String::new() };
@@ -260,5 +266,29 @@ pub fn open_in_browser(url: &str) {
     let opener = if cfg!(target_os = "macos") { "open" } else if cfg!(windows) { "explorer" } else { "xdg-open" };
     if let Err(e) = std::process::Command::new(opener).arg(url).spawn() {
         eprintln!("drover: cannot open the browser ({opener}): {e}");
+    }
+}
+
+/// The address that opens `file` in the web UI (pure: unit-tested; the web UI reads it in `main.tsx`).
+pub fn web_file_url(port: u64, token: &str, space: &str, file: &str, line: Option<u32>, col: Option<u32>) -> String {
+    let mut q = format!("space={}&file={}", percent(space), percent(file));
+    if let Some(l) = line { q.push_str(&format!("&line={l}")); }
+    if let Some(c) = col { q.push_str(&format!("&col={c}")); }
+    format!("http://127.0.0.1:{port}/?token={token}#files?{q}")
+}
+
+fn percent(s: &str) -> String {
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}
+
+#[cfg(test)]
+mod web_file_tests {
+    use super::*;
+
+    #[test]
+    fn builds_an_address_the_web_ui_can_read() {
+        assert_eq!(web_file_url(8765, "tok", "s1", "src/core/keys.ts", Some(41), Some(7)),
+            "http://127.0.0.1:8765/?token=tok#files?space=s1&file=src%2Fcore%2Fkeys.ts&line=41&col=7");
+        assert_eq!(web_file_url(1, "t", "a b", "x.ts", None, None), "http://127.0.0.1:1/?token=t#files?space=a%20b&file=x.ts");
     }
 }
