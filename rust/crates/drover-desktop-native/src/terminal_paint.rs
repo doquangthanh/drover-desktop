@@ -95,10 +95,11 @@ fn run_for(flags: Flags, fg: u32, tf: &TermFont) -> TextRun {
     TextRun { len: 0, font, color, background_color: None, underline, strikethrough: None }
 }
 
-/// The selection highlight of the web UI's dark theme: rgba(150,178,215,.32).
+/// The selection highlight of the current theme (term.selection in tokens.json).
 fn selection_color() -> Hsla {
-    let mut c = hsla(0x96b2d7);
-    c.a = 0.32;
+    let t = crate::theme::current();
+    let mut c = hsla(t.selection);
+    c.a = t.selection_alpha;
     c
 }
 
@@ -181,7 +182,9 @@ pub fn paint(screen: &PaneScreen, tf: &TermFont, bounds: Bounds<Pixels>, focused
     let cursor = Bounds::new(point(bounds.origin.x + cell_w * cur.column.0 as f32, bounds.origin.y + lh * (cur.line.0 + offset) as f32),
                              size(cell_w, lh));
     if offset == 0 && term.mode().contains(TermMode::SHOW_CURSOR) {
-        window.paint_quad(fill(cursor, gpui::hsla(0., 0., 0.82, if focused { 0.8 } else { 0.3 })));
+        let mut c = hsla(crate::theme::current().cursor);
+        c.a = if focused { 0.8 } else { 0.3 };
+        window.paint_quad(fill(cursor, c));
     }
     if let Some(text) = marked.filter(|t| !t.is_empty()) {
         let mut run = run_for(Flags::UNDERLINE, fg_default(), tf);

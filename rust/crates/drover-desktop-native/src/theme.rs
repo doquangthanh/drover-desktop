@@ -30,7 +30,7 @@ pub fn set_theme(name: &str) {
     }
 }
 
-fn current() -> &'static ThemeDef { &ALL[(CURRENT.load(Ordering::Relaxed) as usize).min(ALL.len() - 1)] }
+pub fn current() -> &'static ThemeDef { &ALL[(CURRENT.load(Ordering::Relaxed) as usize).min(ALL.len() - 1)] }
 
 pub fn is_light() -> bool { current().light }
 

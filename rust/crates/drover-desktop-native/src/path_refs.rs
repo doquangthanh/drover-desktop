@@ -74,13 +74,27 @@ pub fn find_path_refs(line: &[char]) -> Vec<PathRef> {
     out
 }
 
+/// Forward slashes, repeated ones folded, except the leading `//` of a UNC path (`\\server\share`).
 fn slash(p: &str) -> String {
+    let p = p.replace('\\', "/");
+    let unc = p.starts_with("//") && !p.starts_with("///");
     let mut out = String::with_capacity(p.len());
-    for c in p.replace('\\', "/").chars() {
-        if c == '/' && out.ends_with('/') { continue }
+    if unc { out.push('/') }
+    for c in p.chars() {
+        if c == '/' && out.ends_with('/') && !(unc && out.len() == 1) { continue }
         out.push(c);
     }
     out
+}
+
+/// Git Bash / MSYS spell `C:\x` as `/c/x`: turn that into `c:/x` so it compares with a drive-letter space.
+fn msys_to_drive(p: &str) -> String {
+    let b = p.as_bytes();
+    if b.len() >= 2 && b[0] == b'/' && b[1].is_ascii_alphabetic() && (b.len() == 2 || b[2] == b'/') {
+        format!("{}:/{}", b[1] as char, p.get(3..).unwrap_or(""))
+    } else {
+        p.to_string()
+    }
 }
 
 fn is_abs(p: &str) -> bool {
@@ -90,7 +104,7 @@ fn is_abs(p: &str) -> bool {
 
 /// Collapse "." and ".." segments of a slash-separated path.
 fn collapse(p: &str) -> String {
-    let root = if p.starts_with('/') { "/" } else if is_abs(p) { &p[..3] } else { "" };
+    let root = if p.starts_with("//") { "//" } else if p.starts_with('/') { "/" } else if is_abs(p) { &p[..3] } else { "" };
     let mut parts: Vec<&str> = Vec::new();
     for seg in p[root.len()..].split('/') {
         match seg {
@@ -108,12 +122,14 @@ pub fn to_space_path(reference: &str, pane_cwd: &str, space_cwd: &str) -> Option
     if space_cwd.is_empty() { return None }
     let space = collapse(&slash(space_cwd));
     let space = space.trim_end_matches('/').to_string();
-    let base = if pane_cwd.is_empty() { space.clone() } else { collapse(&slash(pane_cwd)) };
-    let p = slash(reference);
+    let win = space.as_bytes().get(1) == Some(&b':');
+    // In a drive-letter space, a Git Bash shell prints /c/x for C:\x.
+    let fix = |s: String| if win { msys_to_drive(&s) } else { s };
+    let base = if pane_cwd.is_empty() { space.clone() } else { collapse(&fix(slash(pane_cwd))) };
+    let p = fix(slash(reference));
     let full = collapse(&if is_abs(&p) { p } else { format!("{base}/{p}") });
     // Drive paths compare case-insensitively. ASCII-only lowering keeps byte offsets, so `full` can be sliced below
     // (full Unicode lowering can change a char's byte length, e.g. the Kelvin sign).
-    let win = space.as_bytes().get(1) == Some(&b':');
     let (a, b) = if win { (full.to_ascii_lowercase(), space.to_ascii_lowercase()) } else { (full.clone(), space.clone()) };
     a.strip_prefix(&format!("{b}/")).map(|_| full[space.len() + 1..].to_string())
 }
@@ -194,6 +210,15 @@ mod tests {
         assert_eq!(to_space_path("c:\\W\\P\\x.ts", "", "C:\\w\\p").as_deref(), Some("x.ts"));
         // U+212A (Kelvin sign, 3 bytes) lowercases to `k` (1 byte): it must not match `k`, or the slice is off.
         assert_eq!(to_space_path("C:/W/kx/ab.ts", "", "C:/W/\u{212A}x"), None);
+    }
+
+    #[test]
+    fn git_bash_and_unc_paths() {
+        assert_eq!(to_space_path("/c/Users/me/p/src/a.rs", "", "C:\\Users\\me\\p").as_deref(), Some("src/a.rs"));
+        assert_eq!(to_space_path("src/a.rs", "/c/Users/me/p", "C:\\Users\\me\\p").as_deref(), Some("src/a.rs"));
+        assert_eq!(to_space_path("\\\\srv\\share\\p\\a.rs", "", "\\\\srv\\share\\p").as_deref(), Some("a.rs"));
+        assert_eq!(to_space_path("/srv/share/p/a.rs", "", "\\\\srv\\share\\p"), None); // not the same as //srv/share
+        assert_eq!(to_space_path("/c/x/a.rs", "", "/c/x").as_deref(), Some("a.rs")); // a Unix space keeps /c as is
     }
 
     #[test]

@@ -7,6 +7,13 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      # The colours (theme_data.rs) are generated from drover-core/design/tokens.json; check them against its main branch.
+      - uses: actions/checkout@v4
+        with: { repository: doquangthanh/drover-core, ref: main, path: drover-core }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Generated colours match drover-core/design/tokens.json
+        run: node drover-core/design/gen-tokens.mjs --check --require --only desktop --desktop rust/crates/drover-desktop-native/src
       - name: System libraries for GPUI
         run: |
           sudo apt-get update

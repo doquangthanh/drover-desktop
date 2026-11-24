@@ -46,33 +46,48 @@ pub struct ThemeDef {
     pub note: &'static str,
     pub light: bool,
     pub palette: &'static Palette,
+    /// Terminal cursor colour.
+    pub cursor: u32,
+    /// Terminal selection highlight: an rgb colour painted at `selection_alpha`.
+    pub selection: u32,
+    pub selection_alpha: f32,
     /// The 16 terminal colours (black..white, then the bright ones).
     pub ansi: [u32; 16],
 }
 
 pub static ALL: [ThemeDef; 9] = [
     ThemeDef { id: "dark", label: "Dark", note: "default", light: false, palette: &DARK,
+        cursor: 0xd2d4d9, selection: 0x96b2d7, selection_alpha: 0.32,
         ansi: [0x2c2e31, 0xdc8c95, 0xa6bd91, 0xd8be87, 0x96b2d7, 0xb5a2ce, 0x8cbdc3, 0xd2d4d9, 0x818793, 0xe8a1a9, 0xb9cfa5, 0xe6cf9c, 0xaec5e4, 0xc8b7de, 0xa3cfd4, 0xf0f0f2] },
     ThemeDef { id: "light", label: "Light", note: "", light: true, palette: &LIGHT,
+        cursor: 0x2b2f36, selection: 0x2f6bb3, selection_alpha: 0.25,
         ansi: [0x2b2f36, 0xc0343f, 0x1a7f4b, 0x946200, 0x2f6bb3, 0x8a4fb0, 0x177f88, 0x8a909c, 0x5b6270, 0xd9505b, 0x22a062, 0xb57a00, 0x4a86d0, 0xa468cc, 0x2299a4, 0x1a1c20] },
     ThemeDef { id: "midnight", label: "Midnight", note: "", light: false, palette: &MIDNIGHT,
+        cursor: 0xcdd3e8, selection: 0x7c9cff, selection_alpha: 0.3,
         ansi: [0x1f2538, 0xf08a97, 0x8fd3a8, 0xffcf8a, 0x7c9cff, 0xc3a6ff, 0x7fd6e3, 0xcdd3e8, 0x6b7494, 0xff9aa6, 0xa6e6bd, 0xffdca8, 0x9cb5ff, 0xd4bdff, 0x9fe6f0, 0xf2f4fc] },
     ThemeDef { id: "dracula", label: "Dracula", note: "", light: false, palette: &DRACULA,
+        cursor: 0xf8f8f2, selection: 0xbd93f9, selection_alpha: 0.3,
         ansi: [0x21222c, 0xff5555, 0x50fa7b, 0xf1fa8c, 0xbd93f9, 0xff79c6, 0x8be9fd, 0xf8f8f2, 0x6272a4, 0xff6e6e, 0x69ff94, 0xffffa5, 0xd6acff, 0xff92df, 0xa4ffff, 0xffffff] },
     ThemeDef { id: "tokyo-night", label: "Tokyo Night", note: "", light: false, palette: &TOKYO_NIGHT,
+        cursor: 0xc0caf5, selection: 0x7aa2f7, selection_alpha: 0.3,
         ansi: [0x15161e, 0xf7768e, 0x9ece6a, 0xe0af68, 0x7aa2f7, 0xbb9af7, 0x7dcfff, 0xa9b1d6, 0x565f89, 0xf7768e, 0x9ece6a, 0xe0af68, 0x7aa2f7, 0xbb9af7, 0x7dcfff, 0xc0caf5] },
     ThemeDef { id: "nord", label: "Nord", note: "", light: false, palette: &NORD,
+        cursor: 0xd8dee9, selection: 0x88c0d0, selection_alpha: 0.3,
         ansi: [0x3b4252, 0xbf616a, 0xa3be8c, 0xebcb8b, 0x81a1c1, 0xb48ead, 0x88c0d0, 0xe5e9f0, 0x6b778c, 0xd08770, 0xb4cf9d, 0xf0d9a5, 0x8fb3d6, 0xc4a0be, 0x8fbcbb, 0xeceff4] },
     ThemeDef { id: "catppuccin", label: "Catppuccin", note: "", light: false, palette: &CATPPUCCIN,
+        cursor: 0xf5e0dc, selection: 0xcba6f7, selection_alpha: 0.3,
         ansi: [0x45475a, 0xf38ba8, 0xa6e3a1, 0xf9e2af, 0x89b4fa, 0xf5c2e7, 0x94e2d5, 0xbac2de, 0x7f849c, 0xf38ba8, 0xa6e3a1, 0xf9e2af, 0x89b4fa, 0xf5c2e7, 0x94e2d5, 0xcdd6f4] },
     ThemeDef { id: "one-dark", label: "One Dark", note: "", light: false, palette: &ONE_DARK,
+        cursor: 0x528bff, selection: 0x61afef, selection_alpha: 0.3,
         ansi: [0x3f4451, 0xe06c75, 0x98c379, 0xe5c07b, 0x61afef, 0xc678dd, 0x56b6c2, 0xabb2bf, 0x7a8394, 0xe88a92, 0xaed394, 0xedd09a, 0x82c0f2, 0xd298e4, 0x78c8d2, 0xe6e9ef] },
     ThemeDef { id: "gruvbox", label: "Gruvbox", note: "", light: false, palette: &GRUVBOX,
+        cursor: 0xebdbb2, selection: 0xfabd2f, selection_alpha: 0.28,
         ansi: [0x3c3836, 0xfb4934, 0xb8bb26, 0xfabd2f, 0x83a598, 0xd3869b, 0x8ec07c, 0xd5c4a1, 0x928374, 0xfb6a58, 0xcbce4f, 0xfcd160, 0x9cb8ab, 0xdc9fae, 0xa3cd94, 0xfbf1c7] },
 ];
 
 /// Sizes both clients use (the web UI reads the same numbers from tokens.json).
 pub mod layout {
+    pub const UI_FONT: &str = "Geist";
     pub const SIDEBAR_WIDTH: f32 = 260.0;
     pub const TOPBAR_HEIGHT: f32 = 42.0;
     pub const STATUS_HEIGHT: f32 = 28.0;
