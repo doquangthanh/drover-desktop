@@ -111,8 +111,10 @@ pub fn to_space_path(reference: &str, pane_cwd: &str, space_cwd: &str) -> Option
     let base = if pane_cwd.is_empty() { space.clone() } else { collapse(&slash(pane_cwd)) };
     let p = slash(reference);
     let full = collapse(&if is_abs(&p) { p } else { format!("{base}/{p}") });
-    let win = space.as_bytes().get(1) == Some(&b':'); // drive letters compare case-insensitively
-    let (a, b) = if win { (full.to_lowercase(), space.to_lowercase()) } else { (full.clone(), space.clone()) };
+    // Drive paths compare case-insensitively. ASCII-only lowering keeps byte offsets, so `full` can be sliced below
+    // (full Unicode lowering can change a char's byte length, e.g. the Kelvin sign).
+    let win = space.as_bytes().get(1) == Some(&b':');
+    let (a, b) = if win { (full.to_ascii_lowercase(), space.to_ascii_lowercase()) } else { (full.clone(), space.clone()) };
     a.strip_prefix(&format!("{b}/")).map(|_| full[space.len() + 1..].to_string())
 }
 
@@ -185,6 +187,13 @@ mod tests {
         assert_eq!(to_space_path("/other/y.ts", "/w/p", "/w/p"), None);
         assert_eq!(to_space_path("../../y.ts", "/w/p", "/w/p"), None);
         assert_eq!(to_space_path("a.ts", "/x", ""), None);
+    }
+
+    #[test]
+    fn drive_paths_ignore_ascii_case_only() {
+        assert_eq!(to_space_path("c:\\W\\P\\x.ts", "", "C:\\w\\p").as_deref(), Some("x.ts"));
+        // U+212A (Kelvin sign, 3 bytes) lowercases to `k` (1 byte): it must not match `k`, or the slice is off.
+        assert_eq!(to_space_path("C:/W/kx/ab.ts", "", "C:/W/\u{212A}x"), None);
     }
 
     #[test]
