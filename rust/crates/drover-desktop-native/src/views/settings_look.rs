@@ -48,10 +48,6 @@ impl DroverApp {
     }
 }
 
-const THEMES: [(&str, &str, &str); 4] = [
-    ("dark", "Dark", "default"), ("light", "Light", ""), ("midnight", "Midnight", ""), ("auto", "Auto", "follows the system"),
-];
-
 /// Set a top-level `key = rhs` (before the first `[section]`), keeping every other line.
 pub fn edit_top(text: &str, key: &str, rhs: &str) -> String {
     let mut lines: Vec<String> = text.lines().map(String::from).collect();
@@ -93,11 +89,14 @@ fn swatch(p: &Palette, label: &str, note: &str, on: bool) -> Div {
 pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let current = app.theme_choice.as_str();
     let mut row = div().flex().flex_wrap().gap(px(12.));
-    for (id, label, note) in THEMES {
-        let p = match id { "light" => &theme::LIGHT, "midnight" => &theme::MIDNIGHT, _ => &theme::DARK };
-        row = row.child(swatch(p, label, note, current == id)
+    // Every theme of drover-core/design/tokens.json, then Auto (follows the system, drawn with the first theme's colours).
+    for t in theme::ALL.iter() {
+        let id = t.id;
+        row = row.child(swatch(t.palette, t.label, t.note, current == id)
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { app.theme_choice = id.to_string(); app.choose_theme(id); cx.notify(); })));
     }
+    row = row.child(swatch(theme::ALL[0].palette, "Auto", "follows the system", current == "auto")
+        .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.theme_choice = "auto".to_string(); app.choose_theme("auto"); cx.notify(); })));
     let head = |t: &str| div().text_size(px(11.)).text_color(rgb(theme::dim())).font_weight(FontWeight::SEMIBOLD).child(t.to_string());
     let f = &app.font_form;
     let apply = cx.listener(|app, _, _, cx| {

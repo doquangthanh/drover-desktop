@@ -16,7 +16,7 @@ fn pb(view: View, on: bool) -> Div {
 }
 
 pub fn tab_bar(app: &DroverApp, maximized: bool, cx: &mut Context<DroverApp>) -> Div {
-    let mut bar = div().h(px(42.)).flex_none().flex().items_center().gap(px(3.)).pl(px(10.)).pr(px(8.))
+    let mut bar = div().h(px(crate::theme_data::layout::TOPBAR_HEIGHT)).flex_none().flex().items_center().gap(px(3.)).pl(px(10.)).pr(px(8.))
         .bg(rgb(chrome())).border_b_1().border_color(theme::border()).font_family(UI_FONT);
     if let Some(space) = app.space.as_deref() {
         for t in app.store.tabs_of(space).filter(|t| !app.settled.contains(&t.id)) {
@@ -105,11 +105,22 @@ fn window_controls(maximized: bool, cx: &mut Context<DroverApp>) -> Div {
             .when(linux, |d| d.on_mouse_down(MouseButton::Left, close)))
 }
 
+/// Keys worth knowing on each screen, shown in the status bar: [keys, what it does]. Only keys that work there.
+pub fn screen_hints(screen: View) -> &'static [(&'static str, &'static str)] {
+    match screen {
+        View::Terminals => &[("Ctrl+P", "jump"), ("Ctrl+\\", "split"), ("F8", "next agent")],
+        View::Files => &[("Ctrl+P", "jump"), ("Ctrl+Shift+G", "changes")],
+        View::Changes => &[("Ctrl+Shift+E", "files"), ("F8", "next agent")],
+        View::Inbox => &[("F8", "next agent")],
+        _ => &[],
+    }
+}
+
 pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let blocked = app.store.panes.iter().filter(|p| p.state == "blocked").count();
     let space = app.space.as_deref().and_then(|s| app.store.spaces.iter().find(|x| x.id == s));
     let pane = app.focused.as_deref().and_then(|p| app.store.pane(p));
-    let mut bar = div().h(px(28.)).flex_none().flex().items_center().gap(px(16.)).px(px(14.)).bg(rgb(chrome()))
+    let mut bar = div().h(px(crate::theme_data::layout::STATUS_HEIGHT)).flex_none().flex().items_center().gap(px(16.)).px(px(14.)).bg(rgb(chrome()))
         .border_t_1().border_color(theme::border()).text_size(px(11.8)).text_color(rgb(muted())).font_family(UI_FONT)
         .child(div().flex().items_center().gap(px(6.))
             .child(div().size(px(6.)).rounded_full().bg(rgb(if app.connected { done() } else { error() })))
@@ -130,7 +141,27 @@ pub fn status_bar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     bar.child(div().flex_1())
         .when(app.copy_mode.is_some(), |d| d.child(div().text_color(rgb(accent())).child("COPY MODE · hjkl move · w b e · v V select · y copy · Esc exit")))
         .when(app.chord, |d| d.child(div().text_color(rgb(accent())).child("Ctrl+K… waiting for the second key")))
+        .when(!app.chord && app.copy_mode.is_none(), |d| d.children(screen_hints(app.screen()).iter().map(|(keys, what)| {
+            div().flex().items_center().gap(px(5.)).child(key_cap(keys)).child(div().text_color(rgb(dim())).child(*what))
+        })))
         .child(div().flex().items_center().gap(px(5.)).child(key_cap("Ctrl+K")).child(key_cap("Ctrl+S"))
             .child(div().text_color(rgb(dim())).child("shortcuts"))
-            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.show_shortcuts = true; cx.notify(); })))
+            .on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.open_shortcuts(window, cx))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hints_exist_for_the_main_screens_and_name_real_keys() {
+        for v in [View::Terminals, View::Files, View::Changes] {
+            assert!(!screen_hints(v).is_empty(), "{v:?}");
+        }
+        assert!(screen_hints(View::Settings).is_empty());
+        // every hinted key is a shortcut the palette lists, so the bar never advertises a key that does nothing
+        for (keys, _) in screen_hints(View::Terminals).iter().chain(screen_hints(View::Files)).chain(screen_hints(View::Changes)) {
+            assert!(crate::picker::command_keys().contains(keys), "{keys} is not a palette shortcut");
+        }
+    }
 }

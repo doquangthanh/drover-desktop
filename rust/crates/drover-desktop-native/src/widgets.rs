@@ -26,7 +26,7 @@ pub fn kind_icon(kind: &str) -> Div {
         .bg(rgb(bg)).text_color(rgb(fg)).text_size(px(9.)).font_weight(gpui::FontWeight::BOLD).child(letter)
 }
 
-fn pill(text: String, color: u32) -> Div {
+pub fn pill(text: String, color: u32) -> Div {
     div().h(px(18.)).px(px(6.)).rounded(px(5.)).flex_none().flex().items_center()
         .bg(tint(color, 0.16)).text_color(rgb(color)).text_size(px(10.5)).font_weight(gpui::FontWeight::SEMIBOLD).child(text)
 }

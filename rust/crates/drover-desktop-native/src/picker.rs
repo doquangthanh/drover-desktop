@@ -5,6 +5,7 @@ use gpui::{Context, Div, Entity, Focusable, FontWeight, KeyDownEvent, MouseButto
 use crate::ui_scale::px;
 use serde_json::json;
 
+use crate::palette_search::{fold, mark_ranges, search};
 use crate::theme::{self, accent, dim, fg, muted, UI_FONT};
 use crate::views::View;
 use crate::views::text_input::{InputEvent, TextInput};
@@ -52,6 +53,10 @@ const COMMANDS: [(&str, &str, Cmd); 41] = [
     ("Reload config (your shortcuts in keys.toml)", "", Cmd::ReloadConfig), ("Plugins: reload", "", Cmd::PluginsReload),
     ("Plugins: open the folder", "", Cmd::PluginsFolder), ("Plugins: install from GitHub", "", Cmd::PluginInstall),
 ];
+
+/// The shortcut texts the palette shows (for tests that check a key is real).
+#[cfg(test)]
+pub fn command_keys() -> Vec<&'static str> { COMMANDS.iter().map(|(_, k, _)| *k).filter(|k| !k.is_empty()).collect() }
 
 pub struct Picker {
     pub kind: Kind,
@@ -140,7 +145,7 @@ impl DroverApp {
         cx.notify();
     }
 
-    fn picker_rows(&self, cx: &gpui::App) -> Vec<(Row, String, String)> {
+    fn picker_rows(&self, cx: &gpui::App) -> Vec<(Row, String, String, Vec<usize>)> {
         let Some(p) = &self.picker else { return vec![] };
         let q = fold(p.input.read(cx).value().trim());
         let has = |hay: String| q.is_empty() || fold(&hay).contains(&q);
@@ -150,12 +155,34 @@ impl DroverApp {
                 has(format!("{} {} {} {}", x.name, x.title, space, x.cwd))
             }).map(|x| {
                 let space = self.store.spaces.iter().find(|s| s.id == x.space_id).map(|s| s.name.clone()).unwrap_or_default();
-                (Row::Pane(x.id.clone()), x.name.clone(), format!("{space} · {}", crate::widgets::short_path(&x.cwd)))
+                (Row::Pane(x.id.clone()), x.name.clone(), format!("{space} · {}", crate::widgets::short_path(&x.cwd)), vec![])
             }).collect(),
-            Kind::Commands => COMMANDS.iter().filter(|(l, _, _)| has(l.to_string()))
-                .map(|(l, k, c)| (Row::Cmd(*c), l.to_string(), k.to_string()))
-                .chain(self.plugin_actions().into_iter().filter(|(_, l)| has(l.clone())).map(|(id, l)| (Row::Plugin(id), l, "plugin".to_string())))
-                .collect(),
+            Kind::Commands => {
+                let plugins = self.plugin_actions();
+                let all: Vec<(Row, String, String)> = COMMANDS.iter().map(|(l, k, c)| (Row::Cmd(*c), l.to_string(), k.to_string()))
+                    .chain(plugins.into_iter().map(|(id, l)| (Row::Plugin(id), l, "plugin".to_string()))).collect();
+                let labels: Vec<&str> = all.iter().map(|r| r.1.as_str()).collect();
+                let query = p.input.read(cx).value();
+                let hits = search(&labels, &query);
+                let mut rows: Vec<(Row, String, String, Vec<usize>)> = Vec::new();
+                let mut taken = vec![false; all.len()];
+                if query.trim().is_empty() {
+                    // Nothing typed: what suits this screen first, then everything else.
+                    for want in suggested(self.screen()) {
+                        if let Some(i) = all.iter().position(|(r, _, _)| matches!(r, Row::Cmd(c) if c == want)) {
+                            taken[i] = true;
+                            let (_, label, keys) = &all[i];
+                            rows.push((Row::Cmd(*want), label.clone(), if keys.is_empty() { "suggested".into() } else { format!("suggested · {keys}") }, vec![]));
+                        }
+                    }
+                }
+                let mut all: Vec<Option<(Row, String, String)>> = all.into_iter().map(Some).collect();
+                for h in hits {
+                    if taken[h.index] { continue; }
+                    if let Some((row, label, keys)) = all[h.index].take() { rows.push((row, label, keys, h.marks)); }
+                }
+                rows
+            }
             Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::InstallPlugin | Kind::NewWorktree | Kind::Find => vec![],
         }
     }
@@ -247,7 +274,7 @@ impl DroverApp {
             Cmd::Feedback => self.set_view(View::Feedback, window, cx),
             Cmd::NextBlocked => self.next_with_state("blocked", window, cx),
             Cmd::NextDone => self.next_with_state("done", window, cx),
-            Cmd::Shortcuts => self.show_shortcuts = true,
+            Cmd::Shortcuts => self.open_shortcuts(window, cx),
             Cmd::Jump => self.open_picker(Kind::Jump, window, cx),
             Cmd::Peek => self.open_picker(Kind::Peek, window, cx),
             Cmd::Rename => self.open_picker(Kind::Rename, window, cx),
@@ -275,23 +302,37 @@ impl DroverApp {
     }
 }
 
-/// Lower case without Vietnamese accents: "filé" finds "Files", "Viet" finds "Việt" (Telex composes while you type).
-fn fold(s: &str) -> String {
-    const GROUPS: [(&str, char); 6] = [
-        ("àáảãạăằắẳẵặâầấẩẫậ", 'a'), ("èéẻẽẹêềếểễệ", 'e'), ("ìíỉĩị", 'i'),
-        ("òóỏõọôồốổỗộơờớởỡợ", 'o'), ("ùúủũụưừứửữự", 'u'), ("ỳýỷỹỵ", 'y'),
-    ];
-    s.to_lowercase().chars().map(|c| match c {
-        'đ' => 'd',
-        c => GROUPS.iter().find(|(set, _)| set.contains(c)).map(|(_, base)| *base).unwrap_or(c),
-    }).collect()
+/// The label with the letters that matched what was typed in the accent colour and bold.
+fn highlighted(label: String, marks: &[usize]) -> gpui::AnyElement {
+    if marks.is_empty() { return label.into_any_element(); }
+    let style = gpui::HighlightStyle { color: Some(rgb(accent()).into()), font_weight: Some(FontWeight::BOLD), ..Default::default() };
+    let ranges = mark_ranges(&label, marks).into_iter().map(|r| (r, style)).collect::<Vec<_>>();
+    gpui::StyledText::new(label).with_highlights(ranges).into_any_element()
+}
+
+/// Commands worth offering first on each screen (only ones that exist as palette commands).
+fn suggested(screen: View) -> &'static [Cmd] {
+    match screen {
+        View::Terminals => &[Cmd::NewTab, Cmd::SplitRight, Cmd::Find, Cmd::NextBlocked, Cmd::Files],
+        View::Files => &[Cmd::Changes, Cmd::Jump, Cmd::NextBlocked, Cmd::Shortcuts],
+        View::Changes => &[Cmd::Files, Cmd::NextBlocked, Cmd::NextDone, Cmd::Shortcuts],
+        View::Inbox => &[Cmd::NextBlocked, Cmd::Files, Cmd::Changes],
+        _ => &[],
+    }
+}
+
+impl DroverApp {
+    /// What the user is looking at: the open side panel (Files, Changes, Agents) of the focused agent, else the main view.
+    pub fn screen(&self) -> View {
+        if self.view == View::Terminals { self.panel().unwrap_or(View::Terminals) } else { self.view }
+    }
 }
 
 pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let p = app.picker.as_ref()?;
     let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::Find => "Find in terminal" };
     let mut list = div().flex().flex_col().gap(px(1.)).max_h(px(420.)).overflow_hidden();
-    for (i, (row, label, detail)) in app.picker_rows(cx).into_iter().take(14).enumerate() {
+    for (i, (row, label, detail, marks)) in app.picker_rows(cx).into_iter().take(14).enumerate() {
         let on = i == p.selected;
         let lead = match &row {
             Row::Pane(id) => app.store.pane(id).map(|x| div().flex().items_center().gap(px(6.)).child(kind_icon(&x.kind))
@@ -301,7 +342,7 @@ pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
         list = list.child(div().h(px(32.)).flex_none().flex().items_center().gap(px(10.)).px(px(10.)).rounded(px(7.))
             .when(on, |d| d.bg(theme::selected())).hover(|d| d.bg(theme::hover()))
             .children(lead)
-            .child(div().flex_1().min_w_0().truncate().text_color(rgb(fg())).child(label))
+            .child(div().flex_1().min_w_0().truncate().text_color(rgb(fg())).child(highlighted(label, &marks)))
             .child(div().flex_none().text_size(px(11.5)).text_color(rgb(if matches!(row, Row::Cmd(_) | Row::Plugin(_)) { accent() } else { dim() })).child(detail))
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| {
                 if let Some(p) = app.picker.as_mut() { p.selected = i; }

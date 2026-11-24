@@ -103,6 +103,7 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
             .child(hbtn("splitdown").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.split(&down_id, "col"); })))
             .child(hbtn("zoom").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.toggle_zoom(&zoom_id); cx.notify(); })))
             .child(hbtn("close").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_pane(&close_id, cx); }))))
+        .children(crate::review_banner::banner(app, pane_id, cx))
         .child(div().flex().flex_1().min_h_0().min_w_0().pt(px(10.)).pr(px(6.)).pb(px(6.)).pl(px(14.))
             .when(on_link, |d| d.cursor_pointer()).when(!on_link, |d| d.cursor_text())
             // Select, copy on release, open links (terminal_selection.rs).

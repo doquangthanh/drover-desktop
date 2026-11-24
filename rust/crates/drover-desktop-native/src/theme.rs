@@ -1,48 +1,38 @@
-//! Colour tokens of the three themes (dark, light, midnight), the same values as `frontend/src/styles/base.css` and
-//! `themes.css`, so both clients look alike. The current theme is a process-wide setting: every colour is a function
-//! that reads it at paint time, so switching needs no rebuild of any view.
+//! Colour tokens of every theme. The colours themselves are GENERATED from drover-core/design/tokens.json
+//! (`theme_data.rs`), the same file the web UI's `themes.generated.css` comes from, so both clients look alike.
+//! The current theme is a process-wide setting: every colour is a function that reads it at paint time, so switching
+//! needs no rebuild of any view.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use gpui::{Rgba, rgba};
 
+pub use crate::theme_data::{ThemeDef, ALL};
+
+#[allow(dead_code)] // `faint`, `head`, `add`, `rem` are tokens of the web UI too; the native views take them into use as they grow
 pub struct Palette {
     pub canvas: u32, pub chrome: u32, pub pane: u32, pub raised: u32, pub card: u32,
-    pub fg: u32, pub tfg: u32, pub muted: u32, pub dim: u32,
+    pub fg: u32, pub tfg: u32, pub muted: u32, pub dim: u32, pub faint: u32,
     pub accent: u32, pub working: u32, pub blocked: u32, pub done: u32, pub error: u32, pub yellow: u32, pub on_accent: u32,
+    /// Header strip, added / removed text of a diff (`--head`, `--add`, `--rem`).
+    pub head: u32, pub add: u32, pub rem: u32,
     /// Overlay ink: white on dark themes, black on light.
     pub ink: u32,
 }
 
-pub const DARK: Palette = Palette {
-    canvas: 0x131518, chrome: 0x101114, pane: 0x17191d, raised: 0x2c2e31, card: 0x1d1f23, fg: 0xeeeeef, tfg: 0xd2d4d9,
-    muted: 0x98999b, dim: 0x85868a, accent: 0x96b2d7, working: 0x76a8ff, blocked: 0xf2a33c, done: 0x4cc48c, error: 0xe8848c,
-    yellow: 0xd8be87, on_accent: 0x101114, ink: 0xffffff,
-};
-pub const LIGHT: Palette = Palette {
-    canvas: 0xeef0f3, chrome: 0xe4e7eb, pane: 0xffffff, raised: 0xdfe3e8, card: 0xf6f7f9, fg: 0x1a1c20, tfg: 0x2b2f36,
-    muted: 0x5b6270, dim: 0x6c7380, accent: 0x2f6bb3, working: 0x2563eb, blocked: 0xb86e00, done: 0x1a8f5b, error: 0xc93a47,
-    yellow: 0x946200, on_accent: 0xffffff, ink: 0x000000,
-};
-pub const MIDNIGHT: Palette = Palette {
-    canvas: 0x0b0e17, chrome: 0x080a12, pane: 0x0f1320, raised: 0x1f2538, card: 0x131828, fg: 0xe6e9f5, tfg: 0xcdd3e8,
-    muted: 0x8e97b5, dim: 0x7a84a3, accent: 0x7c9cff, working: 0x5aa2ff, blocked: 0xffb454, done: 0x52d6a0, error: 0xff7a8a,
-    yellow: 0xd8be87, on_accent: 0x101114, ink: 0xffffff,
-};
-
 static CURRENT: AtomicU8 = AtomicU8::new(0);
 
-/// "dark" | "light" | "midnight" | "auto" (auto asks the desktop). Unknown names keep the current theme.
+/// A theme id from tokens.json ("dark", "dracula", ...) or "auto" (asks the desktop). Unknown names keep the current theme.
 pub fn set_theme(name: &str) {
-    let i = match name {
-        "dark" => 0, "light" => 1, "midnight" => 2,
-        "auto" => if system_prefers_dark() { 0 } else { 1 },
-        _ => return,
-    };
-    CURRENT.store(i, Ordering::Relaxed);
+    let id = if name == "auto" { if system_prefers_dark() { "dark" } else { "light" } } else { name };
+    if let Some(i) = ALL.iter().position(|t| t.id == id) {
+        CURRENT.store(i as u8, Ordering::Relaxed);
+    }
 }
 
-pub fn is_light() -> bool { CURRENT.load(Ordering::Relaxed) == 1 }
+pub fn current() -> &'static ThemeDef { &ALL[(CURRENT.load(Ordering::Relaxed) as usize).min(ALL.len() - 1)] }
+
+pub fn is_light() -> bool { current().light }
 
 fn system_prefers_dark() -> bool {
     if !cfg!(target_os = "linux") { return true; }
@@ -50,9 +40,10 @@ fn system_prefers_dark() -> bool {
         .map(|o| !String::from_utf8_lossy(&o.stdout).contains("default")).unwrap_or(true)
 }
 
-pub fn p() -> &'static Palette {
-    match CURRENT.load(Ordering::Relaxed) { 1 => &LIGHT, 2 => &MIDNIGHT, _ => &DARK }
-}
+pub fn p() -> &'static Palette { current().palette }
+
+/// The 16 terminal colours of the current theme.
+pub fn ansi() -> &'static [u32; 16] { &current().ansi }
 
 pub fn canvas() -> u32 { p().canvas }
 pub fn chrome() -> u32 { p().chrome }
@@ -102,5 +93,44 @@ pub fn kind_badge(kind: &str) -> (String, u32, u32) {
         "opencode" => ("O".into(), 0xa6bd91, on_accent()),
         "shell" => ("$".into(), 0x3a3c40, 0xd2d4d9),
         other => (other.chars().next().map(|c| c.to_ascii_uppercase().to_string()).unwrap_or("?".into()), 0x818793, on_accent()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// The current theme is global: tests that change it take turns.
+    static TAKE_TURNS: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn every_generated_theme_can_be_selected_and_has_its_own_colours() {
+        let _turn = TAKE_TURNS.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(ALL[0].id, "dark", "the first theme is the default");
+        for t in ALL.iter() {
+            set_theme(t.id);
+            assert_eq!(p().canvas, t.palette.canvas, "{}", t.id);
+            assert_eq!(is_light(), t.light, "{}", t.id);
+        }
+        set_theme("dracula");
+        assert_eq!(p().accent, 0xbd93f9);
+        set_theme("no-such-theme"); // unknown names keep the current theme
+        assert_eq!(p().accent, 0xbd93f9);
+        set_theme("dark");
+    }
+
+    #[test]
+    fn terminal_colours_follow_the_theme_and_ids_are_unique() {
+        let _turn = TAKE_TURNS.lock().unwrap_or_else(|e| e.into_inner());
+        set_theme("dark");
+        let dark = *ansi();
+        set_theme("light");
+        assert_ne!(*ansi(), dark);
+        set_theme("dark");
+        let mut ids: Vec<_> = ALL.iter().map(|t| t.id).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), ALL.len());
     }
 }

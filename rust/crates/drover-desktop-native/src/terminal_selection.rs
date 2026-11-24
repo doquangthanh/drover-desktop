@@ -14,13 +14,15 @@ use gpui::{ClipboardItem, Context, MouseButton, MouseDownEvent, MouseMoveEvent, 
 use crate::terminal_paint;
 use crate::workspace_app::DroverApp;
 
-/// A link under the mouse: pane, grid line (scrollback is negative), columns, address.
+/// A link under the mouse: pane, grid line (scrollback is negative), columns, and what it opens: an address, or (with
+/// Ctrl held) a file reference such as `src/a.ts:41`.
 #[derive(Clone, PartialEq)]
 pub struct HoverLink {
     pub pane: String,
     pub line: i32,
     pub cols: Range<usize>,
     pub url: String,
+    pub file: Option<crate::path_refs::PathRef>,
 }
 
 impl DroverApp {
@@ -63,7 +65,7 @@ impl DroverApp {
             cx.notify();
             return;
         }
-        let link = self.link_at(pane, point);
+        let link = self.link_at(pane, point, ev.modifiers.control || ev.modifiers.platform);
         if link != self.hover_link {
             self.hover_link = link;
             cx.notify();
@@ -80,9 +82,12 @@ impl DroverApp {
         } else if let Some(text) = text {
             cx.write_to_clipboard(ClipboardItem::new_string(text));
         } else if let Some((point, _)) = self.cell_at(pane, ev.position, window)
-            && let Some(link) = self.link_at(pane, point)
+            && let Some(link) = self.link_at(pane, point, ev.modifiers.control || ev.modifiers.platform)
         {
-            crate::actions::open_in_browser(&link.url);
+            match link.file {
+                Some(file) => self.open_file_ref(pane, &file),
+                None => crate::actions::open_in_browser(&link.url),
+            }
         }
         cx.notify();
     }
@@ -146,18 +151,32 @@ impl DroverApp {
         cx.notify();
     }
 
-    /// The http(s) link that covers `point` in `pane`, if any.
-    fn link_at(&self, pane: &str, point: Point) -> Option<HoverLink> {
+    /// The link that covers `point` in `pane`: an http(s) address, or, when `files` (Ctrl is held), a file reference.
+    fn link_at(&self, pane: &str, point: Point, files: bool) -> Option<HoverLink> {
         let screens = self.screens.lock().unwrap();
         let grid = screens.get(pane)?.term().grid();
         let row = &grid[point.line];
         // One char per column, so an index into the text is a column.
         let cells: Vec<char> = (0..grid.columns())
             .map(|c| row[Column(c)].clone())
-            .map(|cell| if cell.flags.contains(Flags::WIDE_CHAR_SPACER) || cell.c == '\0' { ' ' } else { cell.c })
+            .map(|cell| if cell.flags.contains(Flags::WIDE_CHAR_SPACER) || cell.c == ' ' { ' ' } else { cell.c })
             .collect();
-        let (cols, url) = url_around(&cells, point.column.0)?;
-        Some(HoverLink { pane: pane.to_string(), line: point.line.0, cols, url })
+        if let Some((cols, url)) = url_around(&cells, point.column.0) {
+            return Some(HoverLink { pane: pane.to_string(), line: point.line.0, cols, url, file: None });
+        }
+        if !files { return None }
+        let file = crate::path_refs::find_path_refs(&cells).into_iter().find(|r| (r.start..r.end).contains(&point.column.0))?;
+        Some(HoverLink { pane: pane.to_string(), line: point.line.0, cols: file.start..file.end, url: String::new(), file: Some(file) })
+    }
+
+    /// Ctrl+Click on `src/a.ts:41`: open that file at that line in the web UI (the native Files view is read-only).
+    fn open_file_ref(&mut self, pane: &str, file: &crate::path_refs::PathRef) {
+        let Some(p) = self.store.pane(pane) else { return };
+        let Some(space) = self.store.spaces.iter().find(|s| s.id == p.space_id) else { return };
+        match crate::path_refs::to_space_path(&file.path, &p.cwd, &space.cwd) {
+            Some(rel) => self.open_web_file(&space.id.clone(), &rel, file.line, file.col),
+            None => self.toasts.error(format!("{} is outside this space", file.path)),
+        }
     }
 }
 
