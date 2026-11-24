@@ -85,7 +85,7 @@ impl DroverApp {
             && let Some(link) = self.link_at(pane, point, ev.modifiers.control || ev.modifiers.platform)
         {
             match link.file {
-                Some(file) => self.open_file_ref(pane, &file),
+                Some(file) => self.open_file_ref(pane, &file, cx),
                 None => crate::actions::open_in_browser(&link.url),
             }
         }
@@ -159,7 +159,7 @@ impl DroverApp {
         // One char per column, so an index into the text is a column.
         let cells: Vec<char> = (0..grid.columns())
             .map(|c| row[Column(c)].clone())
-            .map(|cell| if cell.flags.contains(Flags::WIDE_CHAR_SPACER) || cell.c == ' ' { ' ' } else { cell.c })
+            .map(|cell| if cell.flags.contains(Flags::WIDE_CHAR_SPACER) || cell.c == '\0' { ' ' } else { cell.c })
             .collect();
         if let Some((cols, url)) = url_around(&cells, point.column.0) {
             return Some(HoverLink { pane: pane.to_string(), line: point.line.0, cols, url, file: None });
@@ -169,9 +169,15 @@ impl DroverApp {
         Some(HoverLink { pane: pane.to_string(), line: point.line.0, cols: file.start..file.end, url: String::new(), file: Some(file) })
     }
 
-    /// Ctrl+Click on `src/a.ts:41`: open that file at that line in the web UI (the native Files view is read-only).
-    fn open_file_ref(&mut self, pane: &str, file: &crate::path_refs::PathRef) {
-        let Some(p) = self.store.pane(pane) else { return };
+    /// Ctrl+Click on `src/a.ts:41`: open that file at that line in this pane's Files panel (the editor). A file of
+    /// the space outside the pane's folder opens in the web UI instead (the panel only shows the pane's folder).
+    fn open_file_ref(&mut self, pane: &str, file: &crate::path_refs::PathRef, cx: &mut Context<Self>) {
+        let Some(p) = self.store.pane(pane).cloned() else { return };
+        let (line, col) = (file.line.map(|l| l as usize), file.col.map(|c| c as usize));
+        if let Some(rel) = crate::path_refs::to_space_path(&file.path, &p.cwd, &p.cwd) {
+            self.focused = Some(p.id.clone());
+            return self.open_in_files(&rel, line, col, cx);
+        }
         let Some(space) = self.store.spaces.iter().find(|s| s.id == p.space_id) else { return };
         match crate::path_refs::to_space_path(&file.path, &p.cwd, &space.cwd) {
             Some(rel) => self.open_web_file(&space.id.clone(), &rel, file.line, file.col),

@@ -24,16 +24,18 @@ pub enum Kind {
     RenameMachine,
     InstallPlugin,
     NewWorktree,
+    /// Check errors (quickfix.rs): file:line of failed checks; Enter opens the file there.
+    Quickfix,
     Find,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cmd {
     NewTab, CloseTab, NextTab, PrevTab, SplitRight, SplitDown, ClosePane, Zoom, Sidebar,
-    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Palette, ReloadConfig, PluginsReload, PluginsFolder, PluginInstall, Jump, Rename, RenameSpace, RenameTab, CopyMode, ClearPane, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll, AppZoomIn, AppZoomOut, AppZoomReset, WhatsNew, Feedback, Peek,
+    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Palette, ReloadConfig, PluginsReload, PluginsFolder, PluginInstall, Jump, Rename, RenameSpace, RenameTab, CopyMode, ClearPane, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll, AppZoomIn, AppZoomOut, AppZoomReset, WhatsNew, Feedback, Peek, WideEditor, SendSelection, Quickfix,
 }
 
-const COMMANDS: [(&str, &str, Cmd); 41] = [
+const COMMANDS: [(&str, &str, Cmd); 44] = [
     ("New tab", "Ctrl+N", Cmd::NewTab), ("Close tab", "Ctrl+W", Cmd::CloseTab), ("Next tab", "Ctrl+Tab", Cmd::NextTab),
     ("Previous tab", "Ctrl+Shift+Tab", Cmd::PrevTab), ("Split right", "Ctrl+\\", Cmd::SplitRight),
     ("Split down", "Ctrl+K Ctrl+\\", Cmd::SplitDown), ("Close pane", "Ctrl+K W", Cmd::ClosePane), ("Zoom pane", "Ctrl+K Ctrl+M", Cmd::Zoom),
@@ -52,6 +54,8 @@ const COMMANDS: [(&str, &str, Cmd); 41] = [
     ("What's new", "", Cmd::WhatsNew), ("Send feedback", "", Cmd::Feedback),
     ("Reload config (your shortcuts in keys.toml)", "", Cmd::ReloadConfig), ("Plugins: reload", "", Cmd::PluginsReload),
     ("Plugins: open the folder", "", Cmd::PluginsFolder), ("Plugins: install from GitHub", "", Cmd::PluginInstall),
+    ("Files: wide editor / agent beside it", "Ctrl+J in the editor", Cmd::WideEditor), ("Send the editor selection to an agent", "Alt+S", Cmd::SendSelection),
+    ("Check errors: jump to file:line from failed checks", "", Cmd::Quickfix),
 ];
 
 /// The shortcut texts the palette shows (for tests that check a key is real).
@@ -69,6 +73,8 @@ pub struct Picker {
     pub target: Option<String>,
     /// The field's text, kept here for find.rs.
     pub query: String,
+    /// Quickfix: the items once check.list answered.
+    pub fixes: Vec<crate::quickfix::FixItem>,
 }
 
 /// One row: what it shows and what Enter does.
@@ -77,6 +83,7 @@ enum Row {
     Cmd(Cmd),
     /// A plugin action, by its "plugin.id.action" name.
     Plugin(String),
+    Fix(crate::quickfix::FixItem),
 }
 
 impl DroverApp {
@@ -118,6 +125,7 @@ impl DroverApp {
             Kind::RenameMachine => return,
             Kind::InstallPlugin => return self.open_plugin_install(window, cx),
             Kind::NewWorktree => ("Task name: a new branch dr/<task> in its own folder", String::new()),
+            Kind::Quickfix => ("Filter the check errors…", String::new()),
         };
         self.open_picker_with(kind, (placeholder, text), None, window, cx);
     }
@@ -135,7 +143,7 @@ impl DroverApp {
             InputEvent::Cancel => {}
         }).detach();
         window.focus(&input.read(cx).focus_handle(cx));
-        self.picker = Some(Picker { kind, input, selected: 0, pane: self.focused.clone(), note: None, target, query: text });
+        self.picker = Some(Picker { kind, input, selected: 0, pane: self.focused.clone(), note: None, target, query: text, fixes: vec![] });
         cx.notify();
     }
 
@@ -183,6 +191,10 @@ impl DroverApp {
                 }
                 rows
             }
+            Kind::Quickfix => p.fixes.iter().filter(|f| has(format!("{} {} {}", f.path, f.step, f.text))).map(|f| {
+                let at = f.line.map(|l| format!("{}:{l}", f.path)).unwrap_or_else(|| f.path.clone());
+                (Row::Fix(f.clone()), at, format!("{} · {}", f.step, f.text.chars().take(60).collect::<String>()), vec![])
+            }).collect(),
             Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::InstallPlugin | Kind::NewWorktree | Kind::Find => vec![],
         }
     }
@@ -232,6 +244,7 @@ impl DroverApp {
                     Some(Row::Pane(id)) => { self.show_pane(&id); window.focus(&self.term_focus); }
                     Some(Row::Cmd(c)) => self.run_cmd(c, window, cx),
                     Some(Row::Plugin(id)) => self.run_plugin_action(&id),
+                    Some(Row::Fix(f)) => self.open_in_files(&f.path, f.line, f.col, cx),
                     None => {}
                 }
             }
@@ -297,6 +310,9 @@ impl DroverApp {
             Cmd::ZoomOut => self.zoom_terminal(-1.0),
             Cmd::ZoomReset => self.zoom_terminal(0.0),
             Cmd::SelectAll => self.select_all(cx),
+            Cmd::WideEditor => { self.docs.wide = !self.docs.wide; if self.panel() != Some(View::Files) { self.toggle_panel(View::Files, cx) } }
+            Cmd::SendSelection => self.files_send_selection(cx),
+            Cmd::Quickfix => self.open_quickfix(window, cx),
         }
         cx.notify();
     }
@@ -314,8 +330,8 @@ fn highlighted(label: String, marks: &[usize]) -> gpui::AnyElement {
 fn suggested(screen: View) -> &'static [Cmd] {
     match screen {
         View::Terminals => &[Cmd::NewTab, Cmd::SplitRight, Cmd::Find, Cmd::NextBlocked, Cmd::Files],
-        View::Files => &[Cmd::Changes, Cmd::Jump, Cmd::NextBlocked, Cmd::Shortcuts],
-        View::Changes => &[Cmd::Files, Cmd::NextBlocked, Cmd::NextDone, Cmd::Shortcuts],
+        View::Files => &[Cmd::SendSelection, Cmd::WideEditor, Cmd::Quickfix, Cmd::Changes, Cmd::Jump],
+        View::Changes => &[Cmd::Quickfix, Cmd::Files, Cmd::NextBlocked, Cmd::NextDone],
         View::Inbox => &[Cmd::NextBlocked, Cmd::Files, Cmd::Changes],
         _ => &[],
     }
@@ -330,14 +346,16 @@ impl DroverApp {
 
 pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let p = app.picker.as_ref()?;
-    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::Find => "Find in terminal" };
+    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::Find => "Find in terminal", Kind::Quickfix => "Check errors" };
     let mut list = div().flex().flex_col().gap(px(1.)).max_h(px(420.)).overflow_hidden();
-    for (i, (row, label, detail, marks)) in app.picker_rows(cx).into_iter().take(14).enumerate() {
+    // Keep the picked row on screen: 14 rows are drawn, from where the selection needs them.
+    let first = p.selected.saturating_sub(13);
+    for (i, (row, label, detail, marks)) in app.picker_rows(cx).into_iter().enumerate().skip(first).take(14) {
         let on = i == p.selected;
         let lead = match &row {
             Row::Pane(id) => app.store.pane(id).map(|x| div().flex().items_center().gap(px(6.)).child(kind_icon(&x.kind))
                 .child(state_mark(&x.state, x.exit_code, gpui::SharedString::from(format!("pk-{id}"))))),
-            Row::Cmd(_) | Row::Plugin(_) => None,
+            Row::Cmd(_) | Row::Plugin(_) | Row::Fix(_) => None,
         };
         list = list.child(div().h(px(32.)).flex_none().flex().items_center().gap(px(10.)).px(px(10.)).rounded(px(7.))
             .when(on, |d| d.bg(theme::selected())).hover(|d| d.bg(theme::hover()))

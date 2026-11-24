@@ -20,7 +20,7 @@ use crate::picker::Cmd;
 use crate::toasts::{Target, Tone};
 use crate::workspace_app::DroverApp;
 
-pub const IDS: [(&str, Cmd); 39] = [
+pub const IDS: [(&str, Cmd); 42] = [
     ("commands", Cmd::Palette), ("jump", Cmd::Jump), ("peek", Cmd::Peek), ("find", Cmd::Find), ("rename", Cmd::Rename), ("rename_space", Cmd::RenameSpace),
     ("rename_tab", Cmd::RenameTab), ("copy_mode", Cmd::CopyMode), ("clear_pane", Cmd::ClearPane), ("select_all", Cmd::SelectAll),
     ("new_tab", Cmd::NewTab), ("close_tab", Cmd::CloseTab), ("next_tab", Cmd::NextTab), ("previous_tab", Cmd::PrevTab),
@@ -30,7 +30,8 @@ pub const IDS: [(&str, Cmd); 39] = [
     ("settings", Cmd::Settings), ("next_blocked", Cmd::NextBlocked), ("next_done", Cmd::NextDone), ("shortcuts", Cmd::Shortcuts),
     ("text_bigger", Cmd::ZoomIn), ("text_smaller", Cmd::ZoomOut), ("text_normal", Cmd::ZoomReset), ("interface_bigger", Cmd::AppZoomIn),
     ("interface_smaller", Cmd::AppZoomOut), ("interface_normal", Cmd::AppZoomReset), ("whats_new", Cmd::WhatsNew),
-    ("feedback", Cmd::Feedback), ("reload_config", Cmd::ReloadConfig),
+    ("feedback", Cmd::Feedback), ("reload_config", Cmd::ReloadConfig), ("wide_editor", Cmd::WideEditor), ("send_selection", Cmd::SendSelection),
+    ("quickfix", Cmd::Quickfix),
 ];
 
 /// What a chord does: a built-in command, or a plugin action ("plugin.id.action").
@@ -50,6 +51,16 @@ impl Keymap {
         if self.map.is_empty() { return None }
         let m = &ev.keystroke.modifiers;
         self.map.get(&canonical(m.control, m.alt, m.shift, m.platform, &ev.keystroke.key)).cloned()
+    }
+
+    /// Your own chords and what they run, sorted by chord (the shortcut sheet marks them).
+    pub fn entries(&self) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = self.map.iter().map(|(chord, b)| (chord.clone(), match b {
+            Binding::Cmd(c) => IDS.iter().find(|(_, x)| x == c).map(|(id, _)| id.replace('_', " ")).unwrap_or_default(),
+            Binding::Plugin(p) => p.clone(),
+        })).collect();
+        out.sort();
+        out
     }
 
     pub fn len(&self) -> usize {

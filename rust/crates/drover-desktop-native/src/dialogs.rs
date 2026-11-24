@@ -44,6 +44,13 @@ pub fn shortcuts_overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option
     let query = app.shortcuts_filter.read(cx).value();
     let shown = matching_shortcuts(&crate::keys::SHORTCUTS, &query);
     let mut list = div().flex().flex_col().gap(px(2.)).max_h(px(420.)).overflow_hidden();
+    // Your own keys (keys.toml [desktop_keys]) first, marked, as the web sheet marks them.
+    let q = crate::palette_search::fold(query.trim());
+    for (chord, what) in app.keymap.entries().into_iter().filter(|(c, w)| q.is_empty() || crate::palette_search::fold(&format!("{w} {c}")).contains(&q)) {
+        list = list.child(div().flex().items_center().gap(px(12.)).py(px(4.))
+            .child(div().w(px(230.)).flex_none().text_size(px(12.)).text_color(rgb(theme::done())).child(format!("★ {chord}")))
+            .child(div().text_size(px(13.)).text_color(rgb(fg())).child(format!("{what} (yours, keys.toml)"))));
+    }
     for (keys, what) in &shown {
         list = list.child(div().flex().items_center().gap(px(12.)).py(px(4.))
             .child(div().w(px(230.)).flex_none().text_size(px(12.)).text_color(rgb(theme::accent())).child(*keys))

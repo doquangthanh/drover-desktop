@@ -10,7 +10,7 @@ use crate::views::View;
 use crate::workspace_app::DroverApp;
 
 /// Shown by Ctrl+K Ctrl+S (dialogs.rs).
-pub const SHORTCUTS: [(&str, &str); 30] = [
+pub const SHORTCUTS: [(&str, &str); 34] = [
     ("Ctrl+Shift+P · F1", "All commands"), ("Ctrl+P", "Jump to a terminal or agent"),
     ("Ctrl+K P · Alt+click an agent", "Peek at a terminal without leaving yours"), ("F2", "Rename what you picked: space, tab or agent"),
     ("Ctrl+F", "Find in the focused terminal"), ("Ctrl+K [", "Copy mode: hjkl move · v V select · y copy · Esc"),
@@ -22,6 +22,8 @@ pub const SHORTCUTS: [(&str, &str); 30] = [
     ("Ctrl+K Shift+←↑↓→", "Resize pane (Alt: bigger steps)"), ("Ctrl+K Ctrl+M", "Zoom pane"),
     ("Ctrl+Shift+A · E · G", "Agents · Files · Changes panel"), ("Ctrl+Shift+I", "Inbox"), ("Ctrl+Shift+M", "Machines"),
     ("F8", "Next agent that needs you"), ("Shift+F8", "Next finished agent"), ("Escape", "Close a view or this sheet"),
+    ("Ctrl+S · Ctrl+Z · Ctrl+Y (editor)", "Save · undo · redo the open file"), ("Alt+S (editor)", "Send the selection to an agent"),
+    ("Ctrl+J (editor)", "Wide editor, or the agent beside it again"), ("F7 · Shift+F7 · A (review)", "Next · previous hunk · mark it reviewed"),
 ];
 
 impl DroverApp {
