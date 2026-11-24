@@ -4,6 +4,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod actions;
+mod code_editor;
 mod assets;
 mod context_menu;
 mod copy_mode;
@@ -25,6 +26,7 @@ mod keys;
 mod layout_view;
 mod palette_search;
 mod path_refs;
+mod quickfix;
 mod peek;
 mod picker;
 mod review_banner;

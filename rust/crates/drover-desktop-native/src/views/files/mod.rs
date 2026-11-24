@@ -1,8 +1,10 @@
-//! Files panel, read-only (port of `frontend/src/files/*` without the editor), as Herdr's: the focused pane's folder
-//! tree (lazy; an agent's worktree outside the space too), git status per file, the picked file's text and, for a
-//! changed file, its diff vs HEAD. While open it polls `files.status` every 3 s and reloads what changed.
+//! Files panel (port of `frontend/src/files/*`), as Herdr's: the focused pane's folder tree (lazy; an agent's
+//! worktree outside the space too), git status per file, the open files as tabs in the code editor (docs.rs,
+//! code_editor/) and, for a changed file, its diff vs HEAD. While open it polls `files.status` every 3 s and reloads
+//! what changed.
 
 mod content;
+pub mod docs;
 mod tree;
 
 
@@ -36,6 +38,10 @@ pub struct FilesState {
     pub only_changed: bool,
     pub content: Option<Result<Loaded, String>>,
     pub diff: Option<Result<Arc<Vec<DiffRow>>, String>>,
+    /// The shown file's diff vs HEAD as git printed it (the editor's gutter marks).
+    pub raw_diff: Option<String>,
+    /// files.read said the file can be saved (not cut at 1 MB, valid UTF-8).
+    pub editable: bool,
     pub error: Option<String>,
     polled: Option<Instant>,
 }
@@ -81,6 +87,7 @@ impl DroverApp {
         let f = file.clone();
         self.rpc_reply("files.read", space_params(self, json!({"path": file})), move |app, r| {
             if app.files.space != sp || app.files.file.as_ref() != Some(&f) { return; }
+            app.files.editable = r.as_ref().map(|v| v["editable"].as_bool().unwrap_or(true)).unwrap_or(false);
             app.files.content = Some(r.and_then(|v| serde_json::from_value::<FileContent>(v).map_err(|e| e.to_string())).map(|c| {
                 let lines = Arc::new(c.text.as_deref().unwrap_or("").split('\n').map(|l| l.replace('\t', "    ")).collect());
                 (c, lines)
@@ -92,9 +99,11 @@ impl DroverApp {
             let (sp, f) = (self.files.space.clone(), file.clone());
             self.rpc_reply("worktree.diff", json!({"path": cwd, "base": "HEAD", "file": file}), move |app, r| {
                 if app.files.space != sp || app.files.file.as_ref() != Some(&f) { return; }
+                app.files.raw_diff = r.as_ref().ok().and_then(|v| v["diff"].as_str().map(String::from));
                 app.files.diff = Some(r.map(|v| Arc::new(changes::parse_diff(v["diff"].as_str().unwrap_or("")))));
             });
         } else {
+            self.files.raw_diff = None;
             self.files.diff = None;
             self.files.show_diff = false;
         }
@@ -109,20 +118,14 @@ impl DroverApp {
                 }
             }
         } else {
-            match next_file(self.files.file.as_deref(), &path) {
-                Some(open) => {
-                    self.files.file = Some(open);
-                    self.files.show_diff = false;
-                    self.files_load_file(false);
-                }
-                None => self.files_close_file(), // clicked the file that is open: close it
-            }
+            self.files_show(path); // opens it as a tab (docs.rs)
         }
         cx.notify();
     }
 
-    /// Back to the tree from the opened file.
+    /// Back to the tree from the opened file (its tab stays open).
     pub fn files_close_file(&mut self) {
+        self.docs.shown.remove(&self.files.space);
         self.files.file = None;
         self.files.content = None;
         self.files.diff = None;
@@ -181,21 +184,4 @@ pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     }
     let name = crate::widgets::short_path(&app.files.cwd);
     div().flex().flex_col().flex_1().min_h_0().child(tree::panel(app, &name, cx))
-}
-
-/// The file to show after a click on `clicked`: that file, or None when it was already the open one (a second click closes it).
-fn next_file(current: Option<&str>, clicked: &str) -> Option<String> {
-    (current != Some(clicked)).then(|| clicked.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::next_file;
-
-    #[test]
-    fn a_click_opens_a_file_and_a_second_click_on_it_closes_it() {
-        assert_eq!(next_file(None, "a.rs"), Some("a.rs".into()));
-        assert_eq!(next_file(Some("a.rs"), "b.rs"), Some("b.rs".into())); // another file: switch
-        assert_eq!(next_file(Some("a.rs"), "a.rs"), None); // the same file again: close
-    }
 }

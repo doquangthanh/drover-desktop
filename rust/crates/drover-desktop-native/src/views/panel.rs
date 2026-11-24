@@ -91,6 +91,7 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| {
             app.start_drag(crate::drag::Drag::Panel { x0: f32::from(ev.position.x), w0 }, cx);
         }));
-    Some(div().relative().w(px(app.panel_width)).flex_none().flex().flex_col().min_h_0().border_l_1().border_color(theme::border())
+    let wide = app.docs.wide && view == View::Files;
+    Some(div().relative().when(wide, |d| d.flex_1().min_w_0()).when(!wide, |d| d.w(px(app.panel_width)).flex_none()).flex().flex_col().min_h_0().border_l_1().border_color(theme::border())
         .bg(rgb(theme::canvas())).child(head).child(body).child(edge))
 }

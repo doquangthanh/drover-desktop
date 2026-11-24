@@ -49,6 +49,9 @@ pub fn panel(app: &DroverApp, current: Option<&Worktree>, base: &str, file: Opti
     // An opened file: its diff on its own, "← Changes" goes back to the list.
     if let Some(file) = file {
         let back = ui::back_header("Changes", file.to_string(), cx.listener(|app, _, _, cx| { app.changes.picked_file = None; cx.notify(); }));
+        if let Some(review) = super::review_view::file_review(app, cx) {
+            return div().flex().flex_col().flex_1().min_h_0().min_w_0().child(back).child(review);
+        }
         let diff = match &app.changes.diff {
             None => ui::note("Loading diff…", false),
             Some(Err(e)) => ui::note(e.clone(), true),
@@ -111,5 +114,6 @@ pub fn panel(app: &DroverApp, current: Option<&Worktree>, base: &str, file: Opti
         }
     }
     // The changed files take the whole panel; a click opens one (above).
-    div().flex().flex_col().flex_1().min_h_0().min_w_0().child(head).children(output).child(files)
+    div().flex().flex_col().flex_1().min_h_0().min_w_0().child(head).children(output)
+        .children(super::review_view::checks_strip(app, cx)).children(super::review_view::review_bar(app, cx)).child(files)
 }

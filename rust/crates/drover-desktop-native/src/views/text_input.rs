@@ -36,21 +36,8 @@ pub struct TextInput {
     follow: bool,
 }
 
-/// Byte offsets of the start and end (before the `\n`) of the line holding `at`.
-fn line_bounds(text: &str, at: usize) -> (usize, usize) {
-    let start = text[..at].rfind('\n').map(|i| i + 1).unwrap_or(0);
-    let end = text[at..].find('\n').map(|i| at + i).unwrap_or(text.len());
-    (start, end)
-}
-
-/// Cursor after Up (`down` false) or Down: same column (in chars) on the neighbouring line, or the line's end when it is shorter.
-fn vertical(text: &str, cursor: usize, down: bool) -> usize {
-    let (start, end) = line_bounds(text, cursor);
-    let col = text[start..cursor].chars().count();
-    let target = if down { if end >= text.len() { return cursor } else { end + 1 } } else { if start == 0 { return cursor } else { line_bounds(text, start - 1).0 } };
-    let (ts, te) = line_bounds(text, target);
-    text[ts..te].char_indices().nth(col).map(|(i, _)| ts + i).unwrap_or(te)
-}
+// Line maths shared with the code editor.
+use crate::code_editor::buffer::{line_bounds, vertical};
 
 /// Height of one line of a multi-line editor.
 const LINE_H: f32 = 19.;

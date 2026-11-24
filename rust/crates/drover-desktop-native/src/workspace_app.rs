@@ -69,6 +69,8 @@ pub struct DroverApp {
     pub changes: crate::views::changes::ChangesState,
     pub changes_in: crate::views::changes::ChangesInputs,
     pub files: crate::views::files::FilesState,
+    /// Open files of the Files panel (their editors), kept when the focus moves.
+    pub docs: crate::views::files::docs::Docs,
     pub inbox_filter: crate::views::inbox::Filter,
     pub settings: crate::views::settings::SettingsState,
     pub machines_form: crate::views::machines::MachinesForm,
@@ -209,7 +211,7 @@ impl DroverApp {
                     sizes: Arc::default(), resize_sent: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true,
                     term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter, agents_send, shortcuts_filter, banner_dismissed: HashMap::new(),
                     agents: Default::default(), changes: Default::default(), changes_in,
-                    files: Default::default(), inbox_filter: Default::default(),
+                    files: Default::default(), docs: Default::default(), inbox_filter: Default::default(),
                     settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: crate::theme_data::layout::SIDEBAR_WIDTH, drag: None, split_bounds: Arc::default(),
@@ -452,6 +454,7 @@ impl Render for DroverApp {
             _ => {}
         }
         crate::views::panel::refresh(self, cx);
+        crate::views::files::docs::sync(self, window, cx);
         // The tab bar stays outside the focus-tracking area: a click there would focus it and mark the press as handled,
         // and Windows then ignores it on the window buttons (minimize / maximize / close) and the drag area (topbar.rs).
         let main = div()
@@ -464,8 +467,11 @@ impl Render for DroverApp {
                 .track_focus(&self.term_focus)
                 .on_key_down(cx.listener(Self::on_key))
                 .child(if self.view == View::Terminals {
+                    // Files wide (Ctrl+J): the editor takes the room, the agent stays as a column beside it.
+                    let wide = self.docs.wide && self.panel() == Some(View::Files);
                     div().flex().flex_row().flex_1().min_h_0().min_w_0()
-                        .child(layout_view::tab_body(self, cx))
+                        .child(if wide { div().w(crate::ui_scale::px(380.)).flex_none().flex().min_h_0().child(layout_view::tab_body(self, cx)) }
+                               else { layout_view::tab_body(self, cx) })
                         .children(crate::views::panel::panel(self, cx))
                 } else {
                     views::body(self, cx)

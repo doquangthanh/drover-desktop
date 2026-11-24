@@ -4,6 +4,8 @@
 //! action (`reload`) changes.
 
 mod main_panel;
+mod review;
+mod review_view;
 mod worktrees;
 
 pub use main_panel::diff_view;
@@ -33,7 +35,9 @@ pub struct ChangesState {
     pub show_trees: bool,
     /// The last action's output (false) or error (true).
     pub output: Option<(String, bool)>,
-    reload: u64,
+    /// Review loop and checks of the shown worktree (review.rs).
+    pub review: review::ReviewState,
+    pub reload: u64,
     keys: [String; 3],
 }
 
@@ -42,6 +46,9 @@ pub struct ChangesInputs {
     pub base: Entity<TextInput>,
     pub commit: Entity<TextInput>,
     pub task: Entity<TextInput>,
+    /// The review comment being written (review_view.rs), and the review diff's keyboard focus (F7, A).
+    pub comment: Entity<TextInput>,
+    pub review_focus: gpui::FocusHandle,
 }
 
 impl ChangesInputs {
@@ -49,10 +56,12 @@ impl ChangesInputs {
         let base = cx.new(|cx| TextInput::new("base branch", cx));
         let commit = cx.new(|cx| TextInput::new("Commit message", cx));
         let task = cx.new(|cx| TextInput::new("New task worktree", cx));
+        let comment = cx.new(TextInput::new_multiline);
+        cx.subscribe(&comment, |app, _, ev, cx| if let InputEvent::Submit = ev { app.review_submit_draft(cx) }).detach();
         cx.subscribe(&base, |_, _, ev, cx| if let InputEvent::Submit = ev { cx.notify() }).detach();
         cx.subscribe(&commit, |app, _, ev, cx| if let InputEvent::Submit = ev { app.changes_commit(cx) }).detach();
         cx.subscribe(&task, |app, _, ev, cx| if let InputEvent::Submit = ev { app.changes_new_worktree(cx) }).detach();
-        ChangesInputs { base, commit, task }
+        ChangesInputs { base, commit, task, comment, review_focus: cx.focus_handle() }
     }
 }
 
@@ -61,7 +70,7 @@ pub fn space(app: &DroverApp) -> Option<&Space> {
 }
 
 /// RPC params with the space's machine, as the web UI sends them for a remote space.
-fn with_machine(app: &DroverApp, mut params: Value) -> Value {
+pub fn with_machine(app: &DroverApp, mut params: Value) -> Value {
     if let Some(m) = space(app).and_then(|s| s.machine.clone()).filter(|m| !m.is_empty() && m != "local") {
         params["machine"] = json!(m);
     }
@@ -107,6 +116,7 @@ pub fn refresh(app: &mut DroverApp, cx: &gpui::App) {
             if app.changes.keys[0] == k2 { app.changes.trees = Some(r.and_then(|v| serde_json::from_value(v).map_err(|e| e.to_string()))); }
         });
     }
+    review::refresh(app, &tick, cx);
     let (path, base, file) = shown(app, cx);
     let Some(path) = path else { return };
     let files_key = format!("{path}|{base}|{tick}");

@@ -86,6 +86,10 @@ impl DroverApp {
             }
             return;
         }
+        if !self.term_focus.is_focused(window) {
+            // The editor or a field of a panel has the focus: a key it did not use is not for the agent.
+            return;
+        }
         let m = &ev.keystroke.modifiers;
         let key = ev.keystroke.key.as_str();
         // Copy while text is selected (else Ctrl+C reaches the agent); paste the clipboard (terminal_selection.rs).
