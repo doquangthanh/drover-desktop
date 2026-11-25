@@ -69,6 +69,8 @@ pub struct DroverApp {
     pub changes: crate::views::changes::ChangesState,
     pub changes_in: crate::views::changes::ChangesInputs,
     pub files: crate::views::files::FilesState,
+    /// The Files state of the folders left (by scope key), so coming back to an agent's worktree shows it at once.
+    pub files_cache: std::collections::HashMap<String, crate::views::files::FilesState>,
     /// Open files of the Files panel (their editors), kept when the focus moves.
     pub docs: crate::views::files::docs::Docs,
     pub inbox_filter: crate::views::inbox::Filter,
@@ -221,7 +223,7 @@ impl DroverApp {
                     sizes: Arc::default(), resize_sent: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true,
                     term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter, agents_send, shortcuts_filter, banner_dismissed: HashMap::new(),
                     agents: Default::default(), changes: Default::default(), changes_in,
-                    files: Default::default(), docs: crate::views::files::docs::Docs::new(), inbox_filter: Default::default(),
+                    files: Default::default(), files_cache: Default::default(), docs: crate::views::files::docs::Docs::new(), inbox_filter: Default::default(),
                     settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: crate::theme_data::layout::SIDEBAR_WIDTH, drag: None, split_bounds: Arc::default(),
@@ -438,6 +440,19 @@ impl DroverApp {
 
     /// Keys go to `pane` from now on. Like Herdr, looking at a pane takes its size back for this window.
     pub fn focus_pane(&mut self, pane: String, window: &mut Window, cx: &mut Context<Self>) {
+        // The Files view stays open when focus moves to another agent of the same space (the dock's picker).
+        if let (Some(old), Some(View::Files)) = (self.focused.clone(), self.panel()) {
+            let same_space = self.store.pane(&old).zip(self.store.pane(&pane)).is_some_and(|(a, b)| a.space_id == b.space_id);
+            if self.docs.wide && same_space && old != pane {
+                self.panels.remove(&old);
+                self.panels.insert(pane.clone(), View::Files);
+                // An agent of another tab: show that tab too, or keep_selection_valid hands the focus back.
+                if let Some(tab) = self.store.pane(&pane).map(|p| p.tab_id.clone()).filter(|t| Some(t) != self.tab.as_ref()) {
+                    self.tab = Some(tab);
+                    self.sizes.lock().unwrap().clear();
+                }
+            }
+        }
         self.sizes.lock().unwrap().remove(&pane);
         if self.focused.as_deref() != Some(pane.as_str()) {
             self.rpc("pane.focus", serde_json::json!({"pane": pane}));
@@ -486,11 +501,12 @@ impl Render for DroverApp {
                     // Files wide (Ctrl+J): the editor takes the room, the agent stays as a column beside it.
                     let wide = self.panel().is_some_and(|v| crate::views::panel::is_wide(self, v));
                     let dock = self.panel() == Some(View::Files); // Changes has no agent beside it, as on the web
+                    let dock = if dock { crate::views::files::dock::dock(self, cx) } else { None };
                     let row = div().flex().flex_row().flex_1().min_h_0().min_w_0();
                     if wide {
                         // As the web: the view first, the agent as a column on the right.
                         row.children(crate::views::panel::panel(self, cx))
-                            .children(dock.then(|| div().w(crate::ui_scale::px(380.)).flex_none().flex().min_h_0().child(layout_view::tab_body(self, cx))))
+                            .children(dock)
                     } else {
                         row.child(layout_view::tab_body(self, cx)).children(crate::views::panel::panel(self, cx))
                     }

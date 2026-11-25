@@ -46,29 +46,21 @@ pub fn diff_view(rows: Arc<Vec<DiffRow>>, family: SharedString) -> Div {
 }
 
 pub fn panel(app: &DroverApp, current: Option<&Worktree>, base: &str, file: Option<&str>, cx: &mut Context<DroverApp>) -> Div {
-    // An opened file: its diff on its own, "← Changes" goes back to the list.
-    if let Some(file) = file {
-        let back = ui::back_header("Changes", file.to_string(), cx.listener(|app, _, _, cx| { app.changes.picked_file = None; cx.notify(); }));
-        if let Some(review) = super::review_view::file_review(app, cx) {
-            return div().flex().flex_col().flex_1().min_h_0().min_w_0().child(back).child(review);
-        }
-        let diff = match &app.changes.diff {
-            None => ui::note("Loading diff…", false),
-            Some(Err(e)) => ui::note(e.clone(), true),
-            Some(Ok(rows)) => diff_view(rows.clone(), app.code_family.clone()),
-        };
-        return div().flex().flex_col().flex_1().min_h_0().min_w_0().child(back).child(diff);
-    }
     let branch = current.and_then(|t| t.branch.clone()).unwrap_or_default();
     let path = current.map(|t| t.path.clone()).unwrap_or_default();
-    let mut head = div().min_h(px(46.)).flex_none().flex().flex_wrap().items_center().gap(px(8.)).px(px(12.)).py(px(8.))
+    // As the web: branch vs base on the left; New task worktree, Commit…, Rebase, Push & open PR on the right.
+    let mut head = div().min_h(px(42.)).flex_none().flex().flex_wrap().items_center().gap(px(8.)).px(px(12.)).py(px(4.))
         .border_b_1().border_color(theme::border())
         .child(div().text_color(rgb(accent())).font_family(app.code_family.clone()).child(branch.clone()))
         .child(div().text_color(rgb(dim())).child("vs"))
-        .child(div().w(px(150.)).child(app.changes_in.base.clone()))
+        .child(div().w(px(110.)).child(app.changes_in.base.clone()))
         .child(div().flex_1())
-        .child(div().w(px(220.)).child(app.changes_in.commit.clone()))
-        .child(ui::button("Commit", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.changes_commit(cx))));
+        .child(ui::button("+ New task worktree", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| {
+            app.open_picker_with(crate::picker::Kind::TaskWorktree, ("Task name", String::new()), None, window, cx);
+        })))
+        .child(ui::button("Commit…", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| {
+            app.open_picker_with(crate::picker::Kind::Commit, ("Commit message", String::new()), None, window, cx);
+        })));
     if !branch.is_empty() && branch != base {
         let (p, b) = (path.clone(), base.to_string());
         head = head.child(ui::button(&format!("Rebase on {base}"), Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {
@@ -89,18 +81,19 @@ pub fn panel(app: &DroverApp, current: Option<&Worktree>, base: &str, file: Opti
                 cx.notify();
             })))
     });
-    let mut files = div().id("changes-files").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().p(px(6.));
+    let mut files = div().id("changes-files").w(px(250.)).flex_none().min_h_0().overflow_y_scroll().flex().flex_col().p(px(6.))
+        .border_r_1().border_color(theme::border());
     match &app.changes.files {
-        None => files = files.child(ui::note("Loading…", false)),
-        Some(Err(e)) => files = files.child(ui::note(e.clone(), true)),
-        Some(Ok(list)) if list.is_empty() => files = files.child(ui::note(format!("No changes vs {base}"), false)),
+        None => files = files.child(div().p(px(8.)).text_size(px(12.5)).text_color(rgb(dim())).child("Loading…")),
+        Some(Err(e)) => files = files.child(div().p(px(8.)).text_size(px(12.5)).text_color(rgb(error())).child(e.clone())),
+        Some(Ok(list)) if list.is_empty() => files = files.child(div().p(px(8.)).text_size(px(12.5)).text_color(rgb(dim())).child(format!("No changes vs {base}"))),
         Some(Ok(list)) => {
             for f in list {
                 let (name, dir) = changes::split_path(&f.path);
                 let status = f.status.clone().unwrap_or("M".into());
                 let id = f.path.clone();
-                files = files.child(ui::row(false).text_size(px(12.5))
-                    .child(div().w(px(14.)).flex_none().text_color(rgb(status_color(&status))).child(status))
+                files = files.child(ui::row(file == Some(f.path.as_str())).h(px(28.)).px(px(10.)).rounded(px(6.)).text_size(px(12.5))
+                    .child(div().w(px(12.)).flex_none().font_family(app.code_family.clone()).text_color(rgb(status_color(&status))).child(status))
                     .child(div().flex_1().min_w_0().flex().gap(px(5.)).overflow_hidden()
                         .child(div().flex_none().child(name.to_string()))
                         .child(div().min_w_0().truncate().text_color(rgb(dim())).child(dir.to_string())))
@@ -113,7 +106,20 @@ pub fn panel(app: &DroverApp, current: Option<&Worktree>, base: &str, file: Opti
             }
         }
     }
-    // The changed files take the whole panel; a click opens one (above).
+    // The diff of the selected file (the first one until another is picked) beside the list.
+    let diff = match file {
+        None => div().flex_1(),
+        Some(_) => match super::review_view::file_review(app, cx) {
+            Some(review) => review,
+            None => match &app.changes.diff {
+                None => ui::note("Loading diff…", false),
+                Some(Err(e)) => ui::note(e.clone(), true),
+                Some(Ok(rows)) => diff_view(rows.clone(), app.code_family.clone()),
+            },
+        },
+    };
+    let diff = div().flex().flex_col().flex_1().min_w_0().min_h_0().child(diff);
     div().flex().flex_col().flex_1().min_h_0().min_w_0().child(head).children(output)
-        .children(super::review_view::checks_strip(app, cx)).children(super::review_view::review_bar(app, cx)).child(files)
+        .children(super::review_view::checks_strip(app, cx)).children(super::review_view::review_bar(app, cx))
+        .child(div().flex().flex_row().flex_1().min_h_0().child(files).child(diff))
 }

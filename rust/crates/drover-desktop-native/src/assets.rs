@@ -4,6 +4,8 @@ use std::borrow::Cow;
 
 use gpui::{App, AssetSource, Result, SharedString};
 
+const AGENT_TAB: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 50" fill="none" stroke="black" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3,2L12,5.5L3,9M6,3.3L6,7.7M6.8,16.0C9,16.0 9,11.0 6.8,11.0C4.6,11.0 4.6,16.0 6.8,16.0M9,16.0L2,16.0C0,16.0 0,12.0 1.5,11.3M6.5,18.5L6.5,23.5C9,23.5 9.2,18.5 6.5,18.5C4,18.5 3.3,22 4.5,23.3M3,25.8L9,25.8M7.8,25.8C9.3,26.5 9.8,30.5 7,30.5L3,30.5M11.5,34.8L4.5,34.8C3.2,34.8 3,36 3.4,37M9,32.5L9,37.3M4.5,43.5L7.5,47L10.5,43.5"/></svg>"#;
+
 const ICONS: &[(&str, &str)] = &[
     ("search", r#"<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>"#),
     ("sidebar", r#"<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>"#),
@@ -51,6 +53,10 @@ impl AssetSource for Assets {
             // Coloured Material icons (file_icons.rs): drawn as images, not tinted masks.
             return Ok(crate::material_icons::MATERIAL.binary_search_by_key(&name, |(k, _)| k).ok()
                 .map(|i| Cow::Borrowed(crate::material_icons::MATERIAL[i].1)));
+        }
+        if path == "icons/agent-tab.svg" {
+            // The word "Agent" and a chevron turned 90° clockwise, the web's vertical tab label (GPUI cannot turn text).
+            return Ok(Some(Cow::Borrowed(AGENT_TAB.as_bytes())));
         }
         let Some(name) = path.strip_prefix("icons/").and_then(|p| p.strip_suffix(".svg")) else { return Ok(None) };
         Ok(ICONS.iter().find(|(n, _)| *n == name).map(|(_, body)| {

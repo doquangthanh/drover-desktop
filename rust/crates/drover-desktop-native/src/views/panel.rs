@@ -21,8 +21,10 @@ pub struct Scope {
 
 pub fn scope(app: &DroverApp) -> Option<Scope> {
     let space = changes::space(app)?;
+    // Files with the agent beside it: the agent picked in the dock counts even when it lives in another tab.
+    let any_tab = app.panel() == Some(View::Files) && app.docs.wide;
     let pane = app.focused.as_deref().and_then(|id| app.store.pane(id))
-        .filter(|p| Some(&p.tab_id) == app.tab.as_ref() && !p.cwd.is_empty());
+        .filter(|p| (any_tab || Some(&p.tab_id) == app.tab.as_ref()) && !p.cwd.is_empty());
     Some(match pane {
         Some(p) => Scope { pane: Some(p.id.clone()), space: space.id.clone(), cwd: p.cwd.clone(), key: format!("{}|{}", p.id, p.cwd) },
         None => Scope { pane: None, space: space.id.clone(), cwd: space.cwd.clone(), key: format!("{}|{}", space.id, space.cwd) },
@@ -98,6 +100,7 @@ pub fn panel(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
             app.start_drag(crate::drag::Drag::Panel { x0: f32::from(ev.position.x), w0 }, cx);
         }));
     let wide = is_wide(app, view);
-    Some(div().relative().when(wide, |d| d.flex_1().min_w_0()).when(!wide, |d| d.w(px(app.panel_width)).flex_none()).flex().flex_col().min_h_0().border_l_1().border_color(theme::border())
-        .bg(rgb(theme::canvas())).child(head).child(body).child(edge))
+    // Wide: as the web's own views, no title bar (the tab bar's button closes it) and no edge to drag.
+    Some(div().relative().when(wide, |d| d.flex_1().min_w_0()).when(!wide, |d| d.w(px(app.panel_width)).flex_none().border_l_1().border_color(theme::border())).flex().flex_col().min_h_0()
+        .bg(rgb(theme::canvas())).children((!wide).then_some(head)).child(body).children((!wide).then_some(edge)))
 }

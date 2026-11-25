@@ -75,8 +75,13 @@ impl Toasts {
         if let Target::Pane(p) = &target {
             self.list.retain(|t| !matches!(&t.target, Target::Pane(q) if q == p));
         }
+        // A plain confirmation ("Sent to claude-4", "Saved"): the same one is not stacked twice and it leaves quickly.
+        let confirmation = matches!(target, Target::Nothing) && tone == Tone::Done;
+        if confirmation {
+            self.list.retain(|t| !(matches!(t.target, Target::Nothing) && t.title == title && t.sub == sub));
+        }
         self.next_id += 1;
-        let life = tone.life();
+        let life = if confirmation { Duration::from_millis(2500) } else { tone.life() };
         self.list.push(Toast { id: self.next_id, title, sub, kind, tone, action, target, life, left: life });
         let extra = self.list.len().saturating_sub(MAX_TOASTS);
         self.list.drain(..extra);
@@ -245,6 +250,16 @@ mod tests {
 
     fn pane_toast(t: &mut Toasts, pane: &str, tone: Tone) {
         t.push(format!("{pane} x"), String::new(), "claude".into(), tone, "Open", Target::Pane(pane.into()));
+    }
+
+    #[test]
+    fn a_repeated_confirmation_replaces_the_older_one_and_is_short() {
+        let mut t = Toasts::default();
+        for _ in 0..3 { t.push("Sent to claude-4".into(), ".env:8".into(), String::new(), Tone::Done, "", Target::Nothing); }
+        assert_eq!(t.list.len(), 1);
+        assert!(t.list[0].life < Duration::from_secs(3));
+        t.push("Sent to claude-4".into(), ".env:9".into(), String::new(), Tone::Done, "", Target::Nothing);
+        assert_eq!(t.list.len(), 2);
     }
 
     #[test]

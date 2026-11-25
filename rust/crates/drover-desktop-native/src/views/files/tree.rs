@@ -23,10 +23,12 @@ fn row(app: &DroverApp, e: &Entry, depth: usize, label: String, status: Option<S
     let open = e.dir && app.files.open.contains(&e.path);
     let on = !e.dir && app.files.file.as_deref() == Some(e.path.as_str());
     let (path, dir) = (e.path.clone(), e.dir);
-    ui::row(on).h(px(26.)).pl(px(8. + depth as f32 * 14.)).text_size(px(12.5))
+    let dirty = !e.dir && app.docs.open.get(&super::docs::key(&app.files.space, &e.path)).is_some_and(|d| d.editor.read(cx).dirty());
+    ui::row(on).h(px(28.)).pl(px(8. + depth as f32 * 14.)).text_size(px(12.5))
         .child(div().w(px(10.)).flex_none().text_color(rgb(dim())).child(if e.dir { if open { "▾" } else { "▸" } } else { "" }))
         .child(crate::file_icons::file_icon(&e.name, e.dir, open))
         .child(div().flex_1().min_w_0().truncate().text_color(rgb(fg())).child(label))
+        .when(dirty, |d| d.child(div().flex_none().text_size(px(16.)).text_color(rgb(yellow())).child("●")))
         .children(status.map(|s| badge(&s)))
         .when(dot, |d| d.child(div().size(px(5.)).rounded_full().bg(rgb(yellow()))))
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.files_pick(path.clone(), dir, cx)))
