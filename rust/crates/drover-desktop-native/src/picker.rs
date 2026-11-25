@@ -36,10 +36,10 @@ pub enum Kind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cmd {
     NewTab, CloseTab, NextTab, PrevTab, SplitRight, SplitDown, ClosePane, Zoom, Sidebar,
-    Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Palette, ReloadConfig, PluginsReload, PluginsFolder, PluginInstall, Jump, Rename, RenameSpace, RenameTab, CopyMode, ClearPane, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll, AppZoomIn, AppZoomOut, AppZoomReset, WhatsNew, Feedback, Peek, WideEditor, SendSelection, Quickfix, Broadcast, OpenFolder, Chats, NewChat,
+    NewAgent, Agents, Files, Changes, Inbox, Machines, Settings, NextBlocked, NextDone, Shortcuts, Palette, ReloadConfig, PluginsReload, PluginsFolder, PluginInstall, Jump, Rename, RenameSpace, RenameTab, CopyMode, ClearPane, Find, SettleTab, UnsettleTabs, ZoomIn, ZoomOut, ZoomReset, SelectAll, AppZoomIn, AppZoomOut, AppZoomReset, WhatsNew, Feedback, Peek, WideEditor, SendSelection, Quickfix, Broadcast, OpenFolder, Chats, NewChat,
 }
 
-const COMMANDS: [(&str, &str, Cmd); 48] = [
+const COMMANDS: [(&str, &str, Cmd); 49] = [
     ("New tab", "Ctrl+N", Cmd::NewTab), ("Close tab", "Ctrl+W", Cmd::CloseTab), ("Next tab", "Ctrl+Tab", Cmd::NextTab),
     ("Previous tab", "Ctrl+Shift+Tab", Cmd::PrevTab), ("Split right", "Ctrl+\\", Cmd::SplitRight),
     ("Split down", "Ctrl+K Ctrl+\\", Cmd::SplitDown), ("Close pane", "Ctrl+K W", Cmd::ClosePane), ("Zoom pane", "Ctrl+K Ctrl+M", Cmd::Zoom),
@@ -61,7 +61,7 @@ const COMMANDS: [(&str, &str, Cmd); 48] = [
     ("Files: wide editor / agent beside it", "Ctrl+J in the editor", Cmd::WideEditor), ("Send the editor selection to an agent", "Alt+S", Cmd::SendSelection),
     ("Check errors: jump to file:line from failed checks", "", Cmd::Quickfix),
     ("Send to several agents", "", Cmd::Broadcast), ("Open a folder as a new space…", "", Cmd::OpenFolder),
-    ("Chats", "", Cmd::Chats), ("New chat in this folder", "", Cmd::NewChat),
+    ("New agent…", "", Cmd::NewAgent), ("Chats", "", Cmd::Chats), ("New chat in this folder", "", Cmd::NewChat),
 ];
 
 /// The shortcut texts the palette shows (for tests that check a key is real).
@@ -333,6 +333,7 @@ impl DroverApp {
             Cmd::Quickfix => self.open_quickfix(window, cx),
             Cmd::Broadcast => self.open_broadcast(window, cx),
             Cmd::OpenFolder => self.open_folder_picker(window, cx),
+            Cmd::NewAgent => self.open_new_agent(window, cx),
             Cmd::Chats => self.open_chat_view(window, cx),
             Cmd::NewChat => self.new_chat(window, cx),
         }
