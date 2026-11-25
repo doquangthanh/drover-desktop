@@ -73,6 +73,10 @@ pub fn panel(app: &DroverApp, trees: &[Worktree], path: Option<&str>, cx: &mut C
     if let Some(t) = current.filter(|i| *i > 0).map(|i| &trees[i]) {
         let (here, dirty) = (t.path.clone(), t.changes.unwrap_or(0) > 0);
         foot = foot.child(div().flex().gap(px(8.))
+            .child(ui::button("Agent here", Kind::Plain).on_mouse_down(MouseButton::Left, {
+                let cwd = t.path.clone();
+                cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| { app.open_agent_here_menu(ev.position, cwd.clone()); cx.notify(); })
+            }))
             .child(ui::button("Terminal here", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| {
                 app.open_shell_in(&here);
                 window.focus(&app.term_focus);

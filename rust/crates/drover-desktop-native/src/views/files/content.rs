@@ -34,7 +34,7 @@ fn tabs(app: &DroverApp, file: &str, cx: &mut Context<DroverApp>) -> gpui::State
         let on = path == file;
         let dirty = app.docs.open.get(&key(&app.files.space, &path)).is_some_and(|d| d.editor.read(cx).dirty());
         let name = path.rsplit('/').next().unwrap_or(&path).to_string();
-        let (p1, p2) = (path.clone(), path.clone());
+        let (p1, p2, p3) = (path.clone(), path.clone(), path.clone());
         row = row.child(div().h(px(28.)).flex_none().flex().items_center().gap(px(6.)).pl(px(10.)).pr(px(4.)).rounded_t(px(6.))
             .text_size(px(12.)).text_color(rgb(if on { fg() } else { muted() })).when(on, |d| d.bg(rgb(theme::pane())))
             .hover(|d| d.bg(theme::hover()))
@@ -46,7 +46,11 @@ fn tabs(app: &DroverApp, file: &str, cx: &mut Context<DroverApp>) -> gpui::State
                     let dirty = app.docs.open.get(&key(&app.files.space, &p1)).is_some_and(|d| d.editor.read(cx).dirty());
                     if dirty { app.docs.closing = Some(p1.clone()); cx.notify(); } else { app.files_close_tab(&p1, cx); }
                 })))
-            .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { app.files_show(p2.clone()); cx.notify(); })));
+            .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { app.files_show(p2.clone()); cx.notify(); }))
+            .on_mouse_down(MouseButton::Middle, cx.listener(move |app, _, _, cx| {
+                let dirty = app.docs.open.get(&key(&app.files.space, &p3)).is_some_and(|d| d.editor.read(cx).dirty());
+                if dirty { app.docs.closing = Some(p3.clone()); cx.notify(); } else { app.files_close_tab(&p3, cx); }
+            })));
     }
     row
 }

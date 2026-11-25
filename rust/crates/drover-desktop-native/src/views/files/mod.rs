@@ -123,6 +123,43 @@ impl DroverApp {
         cx.notify();
     }
 
+    /// Make an empty file (files.write with create), open the folders down to it and show it.
+    pub fn files_create(&mut self, path: String) {
+        let sp = self.files.space.clone();
+        self.rpc_reply("files.write", space_params(self, json!({"path": path, "text": "", "create": true})), move |app, r| {
+            if app.files.space != sp { return; }
+            match r {
+                Ok(_) => {
+                    app.files_reveal(&path);
+                    app.files_poll();
+                    app.files_show(path.clone());
+                }
+                Err(e) => app.toasts.error(e),
+            }
+        });
+    }
+
+    /// Open every folder above `path` (loading the ones not read yet) and leave the Changed list for the full tree.
+    pub fn files_reveal(&mut self, path: &str) {
+        self.files.only_changed = false;
+        let mut chain = String::new();
+        let parts: Vec<&str> = path.split('/').collect();
+        for part in &parts[..parts.len().saturating_sub(1)] {
+            if !chain.is_empty() { chain.push('/'); }
+            chain.push_str(part);
+            self.files.open.insert(chain.clone());
+            if !self.files.dirs.contains_key(&chain) { self.files_load_dir(&chain); }
+        }
+    }
+
+    /// The ↻ button: read the open folders, the status and the shown file again.
+    pub fn files_reload(&mut self) {
+        let dirs: Vec<String> = self.files.dirs.keys().cloned().collect();
+        for d in dirs { self.files_load_dir(&d); }
+        self.files_poll();
+        self.files_load_file(true);
+    }
+
     /// Back to the tree from the opened file (its tab stays open).
     pub fn files_close_file(&mut self) {
         self.docs.shown.remove(&self.files.space);

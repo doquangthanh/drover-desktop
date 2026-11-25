@@ -18,7 +18,7 @@ pub enum Act {
     RenameAgent(String), Peek(String), SplitRight(String), SplitDown(String), Zoom(String), ClosePane(String),
     Copy, Paste, SelectAll, ClearPane,
     // The tab bar's + menu (new_pane_menu.rs): the String of StartAgent is the agent's command.
-    NewShell, StartAgent(String), NewSpace, NewSpaceInFolder, NewWorktree, OpenWorktrees,
+    NewShell, StartAgent(String), StartAgentAt(String, String), NewSpace, NewSpaceInFolder, NewWorktree, OpenWorktrees,
     // The chat box: the String is a permission mode / a model value (empty = the agent's own).
     ChatMode(String), ChatModel(String),
     // The chat list's right-click menu: the chat id.
@@ -120,6 +120,7 @@ impl DroverApp {
             Act::ClearPane => self.clear_focused_pane(),
             Act::NewShell => self.start_in_space("", None, cx),
             Act::StartAgent(command) => self.start_in_space(&command, None, cx),
+            Act::StartAgentAt(command, cwd) => self.rpc_then("pane.create", serde_json::json!({"command": command, "cwd": cwd}), Self::focus_created),
             Act::NewSpace => self.new_space(cx),
             Act::NewSpaceInFolder => self.open_folder_picker(window, cx),
             Act::ChatMode(m) => self.set_chat_mode(&m),
