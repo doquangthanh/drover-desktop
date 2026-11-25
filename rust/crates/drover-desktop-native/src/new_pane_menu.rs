@@ -29,6 +29,7 @@ fn entries(kinds: &[Value]) -> Vec<Entry> {
     }
     out.extend([
         Entry::Rule,
+        line("New agent…", Icon::Name("plus"), "", Act::NewAgentDialog),
         line("New space", Icon::Name("plus"), "", Act::NewSpace),
         line("New space in a folder…", Icon::Name("folder"), "", Act::NewSpaceInFolder),
         line("New worktree…", Icon::Name("branch"), "", Act::NewWorktree),
@@ -39,7 +40,7 @@ fn entries(kinds: &[Value]) -> Vec<Entry> {
 
 impl DroverApp {
     /// The current space's folder and, for a space on another machine, that machine's alias.
-    fn space_target(&self) -> Option<(String, Option<String>)> {
+    pub(crate) fn space_target(&self) -> Option<(String, Option<String>)> {
         let s = self.space.as_ref().and_then(|id| self.store.spaces.iter().find(|x| &x.id == id))?;
         Some((s.cwd.clone(), s.machine.clone().filter(|m| !m.is_empty() && m != "local")))
     }

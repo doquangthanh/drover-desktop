@@ -73,6 +73,11 @@ impl DroverApp {
             cx.stop_propagation();
             return;
         }
+        if self.new_agent.is_some() && ev.keystroke.key == "escape" {
+            self.close_new_agent(cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.folder_picker.is_some() && ev.keystroke.key == "escape" {
             self.close_folder_picker(cx);
             cx.stop_propagation();

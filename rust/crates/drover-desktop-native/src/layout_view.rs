@@ -39,7 +39,10 @@ fn welcome(cx: &mut Context<DroverApp>) -> gpui::Div {
 /// A split draws its two sides around a gutter: drag it to resize, double-click to even it out (drag.rs).
 fn node_view(app: &DroverApp, node: &Node, tab: &str, path: String, cx: &mut Context<DroverApp>) -> AnyElement {
     match node {
-        Node::Pane { pane } => pane_frame(app, pane, cx).into_any_element(),
+        Node::Pane { pane } => match app.stopped.iter().find(|s| &s.id == pane).filter(|_| app.store.pane(pane).is_none()) {
+            Some(s) => crate::stopped::card(s, cx).into_any_element(),
+            None => pane_frame(app, pane, cx).into_any_element(),
+        },
         Node::Split { split, ratio, a, b } => {
             let row = matches!(split, Dir::Row);
             let ratio = app.shown_ratio(tab, &path, *ratio).clamp(0.05, 0.95) as f32;
