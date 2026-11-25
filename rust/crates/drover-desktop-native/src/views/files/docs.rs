@@ -46,6 +46,11 @@ pub struct Docs {
     pub wide: bool,
 }
 
+impl Docs {
+    /// `wide` starts on: Files opens as the web's tree | editor | agent (Ctrl+J narrows it).
+    pub fn new() -> Self { Docs { wide: true, ..Default::default() } }
+}
+
 pub fn key(scope: &str, path: &str) -> String { format!("{scope}|{path}") }
 
 impl DroverApp {
