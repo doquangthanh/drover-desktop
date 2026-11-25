@@ -13,6 +13,7 @@ mod copy_mode;
 mod dialogs;
 mod drag;
 mod file_icons;
+mod material_icons;
 mod find;
 mod folder_picker;
 mod folder_picker_logic;

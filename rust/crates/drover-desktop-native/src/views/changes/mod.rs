@@ -204,6 +204,15 @@ pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         (Some(Ok(_)), Some(Err(e))) => ui::note(e.clone(), true),
         (Some(Ok(_)), Some(Ok(trees))) => {
             let (path, base, file) = shown(app, cx);
+            let current = || trees.iter().find(|t| Some(&t.path) == path.as_ref()).cloned()
+                .or_else(|| path.clone().map(|p| Worktree { path: p, ..Default::default() }));
+            if crate::views::panel::is_wide(app, crate::views::View::Changes) {
+                // As the web: the worktrees (300 px) beside the branch, checks, files and diff.
+                return gpui::div().flex().flex_row().flex_1().min_h_0().min_w_0()
+                    .child(gpui::div().w(crate::ui_scale::px(300.)).flex_none().flex().flex_col().min_h_0()
+                        .border_r_1().border_color(crate::theme::border()).child(worktrees::panel(app, trees, path.as_deref(), cx)))
+                    .child(gpui::div().flex().flex_col().flex_1().min_w_0().min_h_0().child(main_panel::panel(app, current().as_ref(), &base, file.as_deref(), cx)));
+            }
             if app.changes.show_trees {
                 worktrees::panel(app, trees, path.as_deref(), cx)
             } else {

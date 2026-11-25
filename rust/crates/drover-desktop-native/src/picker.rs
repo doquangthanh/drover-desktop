@@ -28,6 +28,9 @@ pub enum Kind {
     NewWorktree,
     /// A new file in the Files panel (views/files).
     NewFile,
+    /// Find in the open file (views/files).
+    FileFind,
+    GotoLine,
     /// Check errors (quickfix.rs): file:line of failed checks; Enter opens the file there.
     Quickfix,
     Find,
@@ -81,6 +84,8 @@ pub struct Picker {
     pub query: String,
     /// Quickfix: the items once check.list answered.
     pub fixes: Vec<crate::quickfix::FixItem>,
+    /// Jump: lines of terminals' scrollback that match the text (search.query): (pane id, pane name, line).
+    pub hits: Vec<(String, String, String)>,
 }
 
 /// One row: what it shows and what Enter does.
@@ -90,6 +95,8 @@ enum Row {
     /// A plugin action, by its "plugin.id.action" name.
     Plugin(String),
     Fix(crate::quickfix::FixItem),
+    /// A scrollback match: the pane and the text searched for (Enter opens Find there).
+    Hit(String, String),
 }
 
 impl DroverApp {
@@ -128,7 +135,7 @@ impl DroverApp {
                 ("New name", p.name.clone())
             }
             Kind::RenameSpace | Kind::RenameTab => return self.rename_picked(window, cx),
-            Kind::RenameMachine | Kind::RenameChat | Kind::NewFile => return,
+            Kind::RenameMachine | Kind::RenameChat | Kind::NewFile | Kind::FileFind | Kind::GotoLine => return,
             Kind::InstallPlugin => return self.open_plugin_install(window, cx),
             Kind::NewWorktree => ("Task name: a new branch dr/<task> in its own folder", String::new()),
             Kind::Quickfix => ("Filter the check errors…", String::new()),
@@ -144,13 +151,29 @@ impl DroverApp {
                 let text = input.read(cx).value();
                 if let Some(p) = app.picker.as_mut() { p.selected = 0; p.query = text; }
                 if app.picker.as_ref().is_some_and(|p| p.kind == Kind::Find) { app.find_step(true); }
+                if app.picker.as_ref().is_some_and(|p| p.kind == Kind::FileFind) { app.files_find(true, true, window, cx); }
+                app.search_scrollback(cx);
                 cx.notify();
             }
             InputEvent::Cancel | InputEvent::Pick(_) | InputEvent::PasteImage => {}
         }).detach();
         window.focus(&input.read(cx).focus_handle(cx));
-        self.picker = Some(Picker { kind, input, selected: 0, pane: self.focused.clone(), note: None, target, query: text, fixes: vec![] });
+        self.picker = Some(Picker { kind, input, selected: 0, pane: self.focused.clone(), note: None, target, query: text, fixes: vec![], hits: vec![] });
         cx.notify();
+    }
+
+    /// Jump: ask the daemon which terminals' scrollback has the text (two letters or more), and show the lines as rows.
+    fn search_scrollback(&mut self, _cx: &mut Context<Self>) {
+        let Some(p) = self.picker.as_mut().filter(|p| p.kind == Kind::Jump) else { return };
+        let q = p.query.trim().to_string();
+        p.hits.clear();
+        if q.chars().count() < 2 { return }
+        self.rpc_reply("search.query", json!({"q": q}), move |app, r| {
+            let Some(p) = app.picker.as_mut().filter(|p| p.kind == Kind::Jump && p.query.trim() == q) else { return };
+            let text = |v: &serde_json::Value, k: &str| v[k].as_str().unwrap_or("").to_string();
+            p.hits = r.ok().and_then(|v| v["text"].as_array().cloned()).unwrap_or_default().iter()
+                .map(|h| (text(h, "pane"), text(h, "name"), text(h, "text"))).collect();
+        });
     }
 
     pub fn close_picker(&mut self, cx: &mut Context<Self>) {
@@ -170,7 +193,7 @@ impl DroverApp {
             }).map(|x| {
                 let space = self.store.spaces.iter().find(|s| s.id == x.space_id).map(|s| s.name.clone()).unwrap_or_default();
                 (Row::Pane(x.id.clone()), x.name.clone(), format!("{space} · {}", crate::widgets::short_path(&x.cwd)), vec![])
-            }).collect(),
+            }).chain(p.hits.iter().take(12).map(|(pane, name, line)| (Row::Hit(pane.clone(), p.query.trim().to_string()), name.clone(), format!("in scrollback · {}", line.trim()), vec![]))).collect(),
             Kind::Commands => {
                 let plugins = self.plugin_actions();
                 let all: Vec<(Row, String, String)> = COMMANDS.iter().map(|(l, k, c)| (Row::Cmd(*c), l.to_string(), k.to_string()))
@@ -201,7 +224,7 @@ impl DroverApp {
                 let at = f.line.map(|l| format!("{}:{l}", f.path)).unwrap_or_else(|| f.path.clone());
                 (Row::Fix(f.clone()), at, format!("{} · {}", f.step, f.text.chars().take(60).collect::<String>()), vec![])
             }).collect(),
-            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::RenameChat | Kind::InstallPlugin | Kind::NewWorktree | Kind::NewFile | Kind::Find => vec![],
+            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::RenameChat | Kind::InstallPlugin | Kind::NewWorktree | Kind::NewFile | Kind::FileFind | Kind::GotoLine | Kind::Find => vec![],
         }
     }
 
@@ -209,6 +232,8 @@ impl DroverApp {
         let Some(kind) = self.picker.as_ref().map(|p| p.kind) else { return };
         match kind {
             Kind::Find => { self.find_step(false); cx.notify(); }
+            Kind::FileFind => self.files_find(true, false, window, cx),
+            Kind::GotoLine => self.files_goto_line(window, cx),
             Kind::Rename => {
                 let name = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
                 if let (Some(pane), false) = (self.picker.as_ref().and_then(|p| p.pane.clone()), name.is_empty()) {
@@ -263,6 +288,12 @@ impl DroverApp {
                     Some(Row::Cmd(c)) => self.run_cmd(c, window, cx),
                     Some(Row::Plugin(id)) => self.run_plugin_action(&id),
                     Some(Row::Fix(f)) => self.open_in_files(&f.path, f.line, f.col, cx),
+                    Some(Row::Hit(id, q)) => {
+                        self.show_pane(&id);
+                        window.focus(&self.term_focus);
+                        self.open_picker_with(Kind::Find, ("Find in this terminal (Enter: older match)", q), None, window, cx);
+                        self.find_step(true);
+                    }
                     None => {}
                 }
             }
@@ -369,7 +400,7 @@ impl DroverApp {
 
 pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let p = app.picker.as_ref()?;
-    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::RenameChat => "Rename chat", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::NewFile => "New file", Kind::Find => "Find in terminal", Kind::Quickfix => "Check errors" };
+    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::RenameChat => "Rename chat", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::NewFile => "New file", Kind::FileFind => "Find in file", Kind::GotoLine => "Go to line", Kind::Find => "Find in terminal", Kind::Quickfix => "Check errors" };
     let mut list = div().flex().flex_col().gap(px(1.)).max_h(px(420.)).overflow_hidden();
     // Keep the picked row on screen: 14 rows are drawn, from where the selection needs them.
     let first = p.selected.saturating_sub(13);
@@ -378,7 +409,7 @@ pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
         let lead = match &row {
             Row::Pane(id) => app.store.pane(id).map(|x| div().flex().items_center().gap(px(6.)).child(kind_icon(&x.kind))
                 .child(state_mark(&x.state, x.exit_code, gpui::SharedString::from(format!("pk-{id}"))))),
-            Row::Cmd(_) | Row::Plugin(_) | Row::Fix(_) => None,
+            Row::Cmd(_) | Row::Plugin(_) | Row::Fix(_) | Row::Hit(..) => None,
         };
         list = list.child(div().h(px(32.)).flex_none().flex().items_center().gap(px(10.)).px(px(10.)).rounded(px(7.))
             .when(on, |d| d.bg(theme::selected())).hover(|d| d.bg(theme::hover()))

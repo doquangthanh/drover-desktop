@@ -47,6 +47,11 @@ pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        if let Some(name) = path.strip_prefix("file-icons/").and_then(|p| p.strip_suffix(".svg")) {
+            // Coloured Material icons (file_icons.rs): drawn as images, not tinted masks.
+            return Ok(crate::material_icons::MATERIAL.binary_search_by_key(&name, |(k, _)| k).ok()
+                .map(|i| Cow::Borrowed(crate::material_icons::MATERIAL[i].1)));
+        }
         let Some(name) = path.strip_prefix("icons/").and_then(|p| p.strip_suffix(".svg")) else { return Ok(None) };
         Ok(ICONS.iter().find(|(n, _)| *n == name).map(|(_, body)| {
             // Drawn as a mask and tinted with the text colour, so the stroke colour itself does not matter.

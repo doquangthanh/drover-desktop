@@ -221,7 +221,7 @@ impl DroverApp {
                     sizes: Arc::default(), resize_sent: Arc::default(), pending: vec![], show_when_known: None, confirm: None, sidebar_open: true,
                     term_bounds: Arc::default(), selecting: None, hover_link: None, view: View::Terminals, agents_filter, agents_send, shortcuts_filter, banner_dismissed: HashMap::new(),
                     agents: Default::default(), changes: Default::default(), changes_in,
-                    files: Default::default(), docs: Default::default(), inbox_filter: Default::default(),
+                    files: Default::default(), docs: crate::views::files::docs::Docs::new(), inbox_filter: Default::default(),
                     settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: crate::theme_data::layout::SIDEBAR_WIDTH, drag: None, split_bounds: Arc::default(),
@@ -250,8 +250,10 @@ impl DroverApp {
                     self.toast_for_event(&name, &data);
                     self.store.apply(&name, &data);
                     self.chat.apply_event(&name, &data);
-                    if matches!(name.as_str(), "state" | "resync") {
-                        if let Some(list) = crate::stopped::parse(&data) { self.stopped = list; }
+                    if matches!(name.as_str(), "state" | "resync")
+                        && let Some(list) = crate::stopped::parse(&data)
+                    {
+                        self.stopped = list;
                     }
                     self.fit_screens();
                 }
@@ -482,11 +484,16 @@ impl Render for DroverApp {
                 .on_key_down(cx.listener(Self::on_key))
                 .child(if self.view == View::Terminals {
                     // Files wide (Ctrl+J): the editor takes the room, the agent stays as a column beside it.
-                    let wide = self.docs.wide && self.panel() == Some(View::Files);
-                    div().flex().flex_row().flex_1().min_h_0().min_w_0()
-                        .child(if wide { div().w(crate::ui_scale::px(380.)).flex_none().flex().min_h_0().child(layout_view::tab_body(self, cx)) }
-                               else { layout_view::tab_body(self, cx) })
-                        .children(crate::views::panel::panel(self, cx))
+                    let wide = self.panel().is_some_and(|v| crate::views::panel::is_wide(self, v));
+                    let dock = self.panel() == Some(View::Files); // Changes has no agent beside it, as on the web
+                    let row = div().flex().flex_row().flex_1().min_h_0().min_w_0();
+                    if wide {
+                        // As the web: the view first, the agent as a column on the right.
+                        row.children(crate::views::panel::panel(self, cx))
+                            .children(dock.then(|| div().w(crate::ui_scale::px(380.)).flex_none().flex().min_h_0().child(layout_view::tab_body(self, cx))))
+                    } else {
+                        row.child(layout_view::tab_body(self, cx)).children(crate::views::panel::panel(self, cx))
+                    }
                 } else {
                     views::body(self, cx)
                 }));

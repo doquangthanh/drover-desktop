@@ -9,6 +9,7 @@
 
 pub mod buffer;
 mod display;
+pub mod lines;
 mod input;
 pub mod marks;
 pub mod syntax;
@@ -31,6 +32,10 @@ pub enum EditorEvent {
     Send,
     /// Ctrl+J: the editor wide, or the agent's terminal beside it again.
     ToggleDock,
+    /// Ctrl+F: find in this file.
+    Find,
+    /// Ctrl+G: go to a line.
+    GotoLine,
 }
 
 pub struct CodeEditor {
@@ -86,6 +91,35 @@ impl CodeEditor {
 
     /// After a save: this text is what is on disk now.
     pub fn mark_saved(&mut self, text: &str) { self.saved = text.replace("\r\n", "\n"); }
+
+    /// Ctrl+/: comment or uncomment the selected lines with the language's line comment.
+    pub fn toggle_comment(&mut self) -> bool {
+        let Some(token) = self.lang.as_ref().and_then(|l| l.line_comment_token()) else { return false };
+        lines::toggle_comment(&mut self.buf, token);
+        self.follow = true;
+        true
+    }
+
+    /// Select the next (or previous) match of `needle`: from the start of the selection when `restart` (typing in the
+    /// find box), else after it. False when there is none.
+    pub fn find_next(&mut self, needle: &str, forward: bool, restart: bool) -> bool {
+        let sel = self.buf.selection();
+        let from = match (&sel, forward, restart) {
+            (Some(r), _, true) => r.start,
+            (Some(r), true, false) => r.end,
+            (Some(r), false, false) => r.start,
+            (None, ..) => self.buf.cursor,
+        };
+        match lines::find(&self.buf.text, needle, from, forward) {
+            Some(r) => { self.buf.anchor = Some(r.start); self.buf.cursor = r.end; self.follow = true; true }
+            None => false,
+        }
+    }
+
+    /// The selected text on one line (the box's start text for Ctrl+F), empty when nothing or several lines.
+    pub fn selected_word(&self) -> String {
+        self.buf.selected_text().filter(|t| !t.contains('\n')).unwrap_or("").to_string()
+    }
 
     /// Put the caret on 1-based `line` (and `col`) and scroll there.
     pub fn goto(&mut self, line: usize, col: Option<usize>) {

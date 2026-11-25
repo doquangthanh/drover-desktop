@@ -6,7 +6,6 @@ use crate::ui_scale::px;
 use super::Entry;
 use crate::theme::{self, accent, dim, done, error, fg, yellow};
 use crate::views::ui;
-use crate::widgets::icon;
 use crate::workspace_app::DroverApp;
 
 fn badge(s: &str) -> Div {
@@ -26,8 +25,7 @@ fn row(app: &DroverApp, e: &Entry, depth: usize, label: String, status: Option<S
     let (path, dir) = (e.path.clone(), e.dir);
     ui::row(on).h(px(26.)).pl(px(8. + depth as f32 * 14.)).text_size(px(12.5))
         .child(div().w(px(10.)).flex_none().text_color(rgb(dim())).child(if e.dir { if open { "▾" } else { "▸" } } else { "" }))
-        .when(e.dir, |d| d.child(icon("folder", 13., dim())))
-        .when(!e.dir, |d| d.child(crate::file_icons::file_badge(&e.name)))
+        .child(crate::file_icons::file_icon(&e.name, e.dir, open))
         .child(div().flex_1().min_w_0().truncate().text_color(rgb(fg())).child(label))
         .children(status.map(|s| badge(&s)))
         .when(dot, |d| d.child(div().size(px(5.)).rounded_full().bg(rgb(yellow()))))
@@ -62,7 +60,7 @@ pub fn panel(app: &DroverApp, name: &str, cx: &mut Context<DroverApp>) -> Div {
             let e = Entry { name: clean.rsplit('/').next().unwrap_or(&clean).to_string(), path: clean.clone(), dir: false };
             if dir {
                 let target = clean.clone();
-                list = list.child(ui::row(false).h(px(26.)).text_size(px(12.5)).child(icon("folder", 13., dim()))
+                list = list.child(ui::row(false).h(px(26.)).text_size(px(12.5)).child(crate::file_icons::file_icon(&clean, true, false))
                     .child(div().flex_1().min_w_0().truncate().child(clean)).child(badge(s))
                     .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {
                         app.files_reveal(&format!("{target}/x")); // opens the folders down to the untracked one

@@ -65,6 +65,8 @@ fn composer(app: &DroverApp, chat: &Chat, cx: &mut Context<DroverApp>) -> Div {
                 .on_mouse_down(MouseButton::Left, cx.listener(|app, ev: &MouseDownEvent, _, cx| app.open_chat_mode_menu(ev.position, cx))))
             .child(div().px(px(6.)).py(px(2.)).rounded(px(5.)).hover(|d| d.bg(theme::hover())).child(format!("{} ▾", chat.model.clone().unwrap_or_else(|| "default model".into())))
                 .on_mouse_down(MouseButton::Left, cx.listener(|app, ev: &MouseDownEvent, _, cx| app.open_chat_model_menu(ev.position, cx))))
+            .child(div().px(px(6.)).py(px(2.)).rounded(px(5.)).hover(|d| d.bg(theme::hover())).child("Attach a picture")
+                .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.attach_chat_pictures(cx))))
             .child(div().flex_1())
             .child(action))
 }

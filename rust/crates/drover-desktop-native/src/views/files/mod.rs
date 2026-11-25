@@ -216,9 +216,17 @@ pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     if !app.files.dirs.contains_key("") {
         return ui::note("Loading files…", false);
     }
+    let name = crate::widgets::short_path(&app.files.cwd);
+    if crate::views::panel::is_wide(app, View::Files) {
+        // As the web: the tree (320 px) and the open file, or a hint, side by side.
+        let right = if app.files.file.is_some() { content::panel(app, cx) }
+            else { div().flex().flex_1().min_w_0().min_h_0().child(ui::note("Pick a file on the left to read or edit it.", false)) };
+        return div().flex().flex_row().flex_1().min_h_0().min_w_0()
+            .child(div().w(crate::ui_scale::px(320.)).flex_none().flex().flex_col().min_h_0().border_r_1().border_color(crate::theme::border()).child(tree::panel(app, &name, cx)))
+            .child(right);
+    }
     if app.files.file.is_some() {
         return content::panel(app, cx);
     }
-    let name = crate::widgets::short_path(&app.files.cwd);
     div().flex().flex_col().flex_1().min_h_0().child(tree::panel(app, &name, cx))
 }
