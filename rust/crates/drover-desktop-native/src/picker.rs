@@ -26,6 +26,8 @@ pub enum Kind {
     RenameChat,
     InstallPlugin,
     NewWorktree,
+    /// A new file in the Files panel (views/files).
+    NewFile,
     /// Check errors (quickfix.rs): file:line of failed checks; Enter opens the file there.
     Quickfix,
     Find,
@@ -126,7 +128,7 @@ impl DroverApp {
                 ("New name", p.name.clone())
             }
             Kind::RenameSpace | Kind::RenameTab => return self.rename_picked(window, cx),
-            Kind::RenameMachine | Kind::RenameChat => return,
+            Kind::RenameMachine | Kind::RenameChat | Kind::NewFile => return,
             Kind::InstallPlugin => return self.open_plugin_install(window, cx),
             Kind::NewWorktree => ("Task name: a new branch dr/<task> in its own folder", String::new()),
             Kind::Quickfix => ("Filter the check errors…", String::new()),
@@ -199,7 +201,7 @@ impl DroverApp {
                 let at = f.line.map(|l| format!("{}:{l}", f.path)).unwrap_or_else(|| f.path.clone());
                 (Row::Fix(f.clone()), at, format!("{} · {}", f.step, f.text.chars().take(60).collect::<String>()), vec![])
             }).collect(),
-            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::RenameChat | Kind::InstallPlugin | Kind::NewWorktree | Kind::Find => vec![],
+            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::RenameChat | Kind::InstallPlugin | Kind::NewWorktree | Kind::NewFile | Kind::Find => vec![],
         }
     }
 
@@ -223,6 +225,11 @@ impl DroverApp {
                 let task = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
                 self.close_picker(cx);
                 if !task.is_empty() { self.start_in_space("", Some(&task), cx); }
+            }
+            Kind::NewFile => {
+                let path = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().trim_start_matches('/').to_string()).unwrap_or_default();
+                self.close_picker(cx);
+                if !path.is_empty() { self.files_create(path); }
             }
             Kind::RenameMachine => {
                 let name = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
@@ -361,7 +368,7 @@ impl DroverApp {
 
 pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let p = app.picker.as_ref()?;
-    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::RenameChat => "Rename chat", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::Find => "Find in terminal", Kind::Quickfix => "Check errors" };
+    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::RenameChat => "Rename chat", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::NewFile => "New file", Kind::Find => "Find in terminal", Kind::Quickfix => "Check errors" };
     let mut list = div().flex().flex_col().gap(px(1.)).max_h(px(420.)).overflow_hidden();
     // Keep the picked row on screen: 14 rows are drawn, from where the selection needs them.
     let first = p.selected.saturating_sub(13);

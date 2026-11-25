@@ -77,6 +77,21 @@ impl DroverApp {
         });
     }
 
+    /// "Agent here" in the Changes panel: a menu of this computer's installed agents, started in `cwd` (a worktree).
+    pub fn open_agent_here_menu(&mut self, at: Point<Pixels>, cwd: String) {
+        self.rpc_reply("agent.kinds", json!({}), move |app, r| {
+            let kinds = r.ok().and_then(|v| v.as_array().cloned()).unwrap_or_default();
+            let mut out = vec![Entry::Head("Start an agent here".into())];
+            for k in kinds.iter().filter(|k| k["installed"] != false) {
+                let kind = k["kind"].as_str().unwrap_or("");
+                let command = k["command"].as_str().unwrap_or(kind).to_string();
+                out.push(Entry::Item { label: k["label"].as_str().unwrap_or(kind).to_string(), icon: Some(Icon::Kind(kind.into())),
+                    hint: String::new(), key: None, act: Some(Act::StartAgentAt(command, cwd.clone())) });
+            }
+            app.menu = Some(Menu { at, entries: out });
+        });
+    }
+
     fn show_new_menu(&mut self, at: Point<Pixels>, kinds: Option<Value>) {
         let kinds = kinds.and_then(|v| v.as_array().cloned()).unwrap_or_default();
         self.menu = Some(Menu { at, entries: entries(&kinds) });
