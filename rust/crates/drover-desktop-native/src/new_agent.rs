@@ -33,6 +33,15 @@ pub fn command_line(base: &str, args: &str) -> String {
 impl DroverApp {
     pub fn open_new_agent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let (cwd, machine) = self.space_target().unwrap_or_default();
+        self.open_new_agent_with(cwd, machine, window, cx);
+    }
+
+    /// From a machine's card: that machine, in its home folder (the folder field starts empty).
+    pub fn open_new_agent_on(&mut self, machine: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_new_agent_with(String::new(), machine, window, cx);
+    }
+
+    fn open_new_agent_with(&mut self, cwd: String, machine: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         let field = |cx: &mut Context<Self>, hint: &'static str, text: &str| {
             let t = cx.new(|cx| { let mut i = TextInput::new(hint, cx); i.set_text(text, cx); i });
             cx.subscribe(&t, |app, _, ev, cx| if matches!(ev, InputEvent::Submit) { app.start_new_agent(cx) }).detach();

@@ -21,6 +21,9 @@ pub struct ReviewState {
     pub unsupported: bool,
     pub summary: Option<Value>,
     pub checks: Option<Value>,
+    /// check.config of the folder: it has steps (or a checks file not trusted yet). The strip is hidden otherwise.
+    pub configured: bool,
+    config_for: String,
     polled: Option<Instant>,
     /// The check step whose output is shown.
     pub check_open: Option<String>,
@@ -45,6 +48,15 @@ pub fn refresh(app: &mut DroverApp, tick: &str, cx: &gpui::App) {
             if app.changes.review.keys[0] != k { return }
             app.changes.review.unsupported = r.as_ref().err().is_some_and(|e| e.to_lowercase().contains("unknown method"));
             app.changes.review.summary = r.ok();
+        });
+    }
+    if app.changes.review.config_for != path {
+        app.changes.review.config_for = path.to_string();
+        app.changes.review.configured = false;
+        let p = path.to_string();
+        app.rpc_reply("check.config", with_machine(app, json!({"cwd": path})), move |app, r| {
+            if app.changes.review.config_for != p { return; }
+            app.changes.review.configured = r.is_ok_and(|c| c["steps"].as_array().is_some_and(|s| !s.is_empty()) || c["source"] == "untrusted");
         });
     }
     let running = app.changes.review.checks.as_ref().is_some_and(busy);

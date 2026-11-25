@@ -55,6 +55,29 @@ impl DroverApp {
         cx.notify();
     }
 
+    /// The "Attach a picture" button: choose png / jpeg / gif / webp files and keep them for the next message.
+    pub fn attach_chat_pictures(&mut self, cx: &mut Context<Self>) {
+        let ask = cx.prompt_for_paths(gpui::PathPromptOptions { files: true, directories: false, multiple: true, prompt: Some("Attach pictures".into()) });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = ask.await else { return };
+            this.update(cx, |app, cx| { for p in paths { app.add_chat_picture_file(&p); } cx.notify(); }).ok();
+        }).detach();
+    }
+
+    fn add_chat_picture_file(&mut self, path: &std::path::Path) {
+        use base64::Engine;
+        let mime = match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref() {
+            Some("png") => "image/png", Some("jpg" | "jpeg") => "image/jpeg", Some("gif") => "image/gif", Some("webp") => "image/webp",
+            _ => return self.toasts.error("Pictures must be png, jpeg, gif or webp.".into()),
+        };
+        if self.chat.images.len() >= 8 { return self.toasts.error("At most 8 pictures per message.".into()); }
+        match std::fs::read(path) {
+            Ok(b) if b.len() > 10_000_000 => self.toasts.error("A picture is larger than 10 MB.".into()),
+            Ok(b) => self.chat.images.push((mime.into(), base64::engine::general_purpose::STANDARD.encode(b))),
+            Err(e) => self.toasts.error(format!("Cannot read the picture: {e}")),
+        }
+    }
+
     pub fn stop_chat(&mut self) {
         if let Some(id) = self.chat.current.clone() { self.rpc("chat.interrupt", json!({"chat": id})); }
     }

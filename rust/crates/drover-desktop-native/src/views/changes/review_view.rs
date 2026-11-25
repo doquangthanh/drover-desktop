@@ -19,6 +19,7 @@ fn mark(status: &str) -> &'static str {
 pub fn checks_strip(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let run = app.changes.review.checks.as_ref()?;
     let results = run["results"].as_array().cloned().unwrap_or_default();
+    if results.is_empty() && !app.changes.review.configured { return None; } // no checks set up for this folder (as the web strip)
     let mut row = div().flex().flex_wrap().items_center().gap(px(6.)).child(div().text_color(rgb(dim())).child("Checks"));
     if results.is_empty() { row = row.child(div().text_color(rgb(dim())).child("not run yet")); }
     for r in &results {

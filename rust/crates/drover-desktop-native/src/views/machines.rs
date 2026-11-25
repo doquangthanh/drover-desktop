@@ -142,8 +142,12 @@ pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
             Some("connecting") => (format!("Connecting… · {target}"), working()),
             _ => (m["error"].as_str().unwrap_or("Unreachable. Agents there keep running; you'll see them when it's back.").to_string(), error()),
         };
-        let (a, rename_alias, test_alias) = (alias.clone(), alias.clone(), alias.clone());
+        let (a, rename_alias, test_alias, agent_alias) = (alias.clone(), alias.clone(), alias.clone(), alias.clone());
+        let connected = m["status"].as_str() == Some("connected");
         let buttons = div().flex().gap(px(8.))
+            .when(connected, |d| d.child(ui::button("New agent here", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| {
+                app.open_new_agent_on(Some(agent_alias.clone()), window, cx);
+            }))))
             .child(ui::button("Test", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {
                 app.test_saved_machine(test_alias.clone(), target.clone());
                 cx.notify();
