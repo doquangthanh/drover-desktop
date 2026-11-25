@@ -28,6 +28,11 @@ const SHELL: &[&str] = &["case", "do", "done", "elif", "else", "esac", "export",
     "then", "until", "while", "true", "false"];
 const DATA: &[&str] = &["true", "false", "null"];
 
+impl Lang {
+    /// The token a line comment starts with (`//`, `#`…), for Ctrl+/.
+    pub fn line_comment_token(&self) -> Option<&'static str> { self.line_comment.first().copied() }
+}
+
 /// The language of a file name; None for plain text (Markdown, logs …): drawn without colours.
 pub fn lang_for(path: &str) -> Option<Lang> {
     let ext = path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();

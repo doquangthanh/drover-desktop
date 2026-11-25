@@ -60,6 +60,13 @@ impl CodeEditor {
             (true, false, "y") if ed => self.buf.redo(),
             (true, false, "z") if ed => self.buf.redo(),
             (true, false, "s") => { cx.emit(EditorEvent::Save); false }
+            (true, false, "f") => { cx.emit(EditorEvent::Find); false }
+            (true, false, "g") => { cx.emit(EditorEvent::GotoLine); false }
+            (true, false, "/") if ed => self.toggle_comment(),
+            (true, false, "d") if ed && shift => { super::lines::duplicate_lines(&mut self.buf); self.follow = true; true }
+            (true, false, "k") if ed && shift => { super::lines::delete_lines(&mut self.buf); self.follow = true; true }
+            (false, true, "up") if ed => { let m = super::lines::move_lines(&mut self.buf, true); self.follow = true; m }
+            (false, true, "down") if ed => { let m = super::lines::move_lines(&mut self.buf, false); self.follow = true; m }
             (true, false, "j") => { cx.emit(EditorEvent::ToggleDock); false }
             (false, true, "s") => { cx.emit(EditorEvent::Send); false }
             (false, false, "backspace") if ed => { b.delete(false, false); true }

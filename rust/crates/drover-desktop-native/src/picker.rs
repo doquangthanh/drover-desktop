@@ -28,6 +28,9 @@ pub enum Kind {
     NewWorktree,
     /// A new file in the Files panel (views/files).
     NewFile,
+    /// Find in the open file (views/files).
+    FileFind,
+    GotoLine,
     /// Check errors (quickfix.rs): file:line of failed checks; Enter opens the file there.
     Quickfix,
     Find,
@@ -132,7 +135,7 @@ impl DroverApp {
                 ("New name", p.name.clone())
             }
             Kind::RenameSpace | Kind::RenameTab => return self.rename_picked(window, cx),
-            Kind::RenameMachine | Kind::RenameChat | Kind::NewFile => return,
+            Kind::RenameMachine | Kind::RenameChat | Kind::NewFile | Kind::FileFind | Kind::GotoLine => return,
             Kind::InstallPlugin => return self.open_plugin_install(window, cx),
             Kind::NewWorktree => ("Task name: a new branch dr/<task> in its own folder", String::new()),
             Kind::Quickfix => ("Filter the check errors…", String::new()),
@@ -148,6 +151,7 @@ impl DroverApp {
                 let text = input.read(cx).value();
                 if let Some(p) = app.picker.as_mut() { p.selected = 0; p.query = text; }
                 if app.picker.as_ref().is_some_and(|p| p.kind == Kind::Find) { app.find_step(true); }
+                if app.picker.as_ref().is_some_and(|p| p.kind == Kind::FileFind) { app.files_find(true, true, window, cx); }
                 app.search_scrollback(cx);
                 cx.notify();
             }
@@ -220,7 +224,7 @@ impl DroverApp {
                 let at = f.line.map(|l| format!("{}:{l}", f.path)).unwrap_or_else(|| f.path.clone());
                 (Row::Fix(f.clone()), at, format!("{} · {}", f.step, f.text.chars().take(60).collect::<String>()), vec![])
             }).collect(),
-            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::RenameChat | Kind::InstallPlugin | Kind::NewWorktree | Kind::NewFile | Kind::Find => vec![],
+            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::RenameChat | Kind::InstallPlugin | Kind::NewWorktree | Kind::NewFile | Kind::FileFind | Kind::GotoLine | Kind::Find => vec![],
         }
     }
 
@@ -228,6 +232,8 @@ impl DroverApp {
         let Some(kind) = self.picker.as_ref().map(|p| p.kind) else { return };
         match kind {
             Kind::Find => { self.find_step(false); cx.notify(); }
+            Kind::FileFind => self.files_find(true, false, window, cx),
+            Kind::GotoLine => self.files_goto_line(window, cx),
             Kind::Rename => {
                 let name = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
                 if let (Some(pane), false) = (self.picker.as_ref().and_then(|p| p.pane.clone()), name.is_empty()) {
@@ -394,7 +400,7 @@ impl DroverApp {
 
 pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let p = app.picker.as_ref()?;
-    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::RenameChat => "Rename chat", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::NewFile => "New file", Kind::Find => "Find in terminal", Kind::Quickfix => "Check errors" };
+    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::RenameChat => "Rename chat", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::NewFile => "New file", Kind::FileFind => "Find in file", Kind::GotoLine => "Go to line", Kind::Find => "Find in terminal", Kind::Quickfix => "Check errors" };
     let mut list = div().flex().flex_col().gap(px(1.)).max_h(px(420.)).overflow_hidden();
     // Keep the picked row on screen: 14 rows are drawn, from where the selection needs them.
     let first = p.selected.saturating_sub(13);

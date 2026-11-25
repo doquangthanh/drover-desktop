@@ -124,6 +124,27 @@ impl DroverApp {
         }
     }
 
+    /// Find box of the open file: select the next (or previous) match of what was typed; says when there is none.
+    pub fn files_find(&mut self, forward: bool, restart: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(query) = self.picker.as_ref().map(|p| p.query.clone()) else { return };
+        let Some(editor) = self.shown_doc().map(|d| d.editor.clone()) else { return };
+        let found = !query.is_empty() && editor.update(cx, |e, _| e.find_next(&query, forward, restart));
+        if let Some(p) = self.picker.as_mut() { p.note = (!query.is_empty() && !found).then(|| "no match".to_string()); }
+        let _ = window;
+        cx.notify();
+    }
+
+    /// Go to line: put the caret on the number typed, back to the editor.
+    pub fn files_goto_line(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let n = self.picker.as_ref().and_then(|p| p.query.trim().parse::<usize>().ok());
+        self.close_picker(cx);
+        if let (Some(n), Some(editor)) = (n, self.shown_doc().map(|d| d.editor.clone())) {
+            editor.update(cx, |e, _| e.goto(n.max(1), None));
+        }
+        self.want_term_focus = false;
+        if let Some(editor) = self.shown_doc().map(|d| d.editor.clone()) { window.focus(&gpui::Focusable::focus_handle(editor.read(cx), cx)); }
+    }
+
     /// Alt+S: paste the selection (path:lines and the code) into an agent of this space, without Enter.
     pub fn files_send_selection(&mut self, cx: &mut Context<Self>) {
         let Some(doc) = self.shown_doc() else { return };
@@ -172,11 +193,16 @@ pub fn sync(app: &mut DroverApp, window: &mut Window, cx: &mut Context<DroverApp
         let (text, editable) = (c.text.clone().unwrap_or_default(), app.files.editable);
         let editor = cx.new(|cx| CodeEditor::new(&file, &text, editable, cx));
         let p = file.clone();
-        cx.subscribe_in(&editor, window, move |app, _, ev, _, cx| match ev {
+        cx.subscribe_in(&editor, window, move |app, _, ev, window, cx| match ev {
             EditorEvent::Save => app.files_save(&p, false, cx),
             EditorEvent::Send => app.files_send_selection(cx),
             EditorEvent::ToggleDock => { app.docs.wide = !app.docs.wide; cx.notify(); }
             EditorEvent::Changed => cx.notify(),
+            EditorEvent::Find => {
+                let word = app.shown_doc().map(|d| d.editor.read(cx).selected_word()).unwrap_or_default();
+                app.open_picker_with(crate::picker::Kind::FileFind, ("Find in this file (Enter: next)", word), None, window, cx);
+            }
+            EditorEvent::GotoLine => app.open_picker_with(crate::picker::Kind::GotoLine, ("Go to line…", String::new()), None, window, cx),
         }).detach();
         let goto = app.docs.pending_goto.take().filter(|(kk, _, _)| *kk == k).map(|(_, l, c)| (l, c));
         app.docs.open.insert(k.clone(), OpenDoc { editor, mtime: c.mtime_us, stale: false, conflict: false, marks_from: None, saved: None, goto });
