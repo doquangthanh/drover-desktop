@@ -25,6 +25,8 @@ pub enum Act {
     ChatRename(String), ChatRemove(String),
     // The folder picker's machine menu: the alias, empty = this computer.
     FolderMachine(String),
+    // The Files view's agent dock picker: the pane to show.
+    DockPane(String),
 }
 
 /// What a menu line shows on its left: a line icon by name, or an agent kind's badge.
@@ -131,6 +133,7 @@ impl DroverApp {
             Act::FolderMachine(m) => self.folder_machine(Some(m).filter(|m| !m.is_empty()), cx),
             Act::NewWorktree => self.open_picker(Kind::NewWorktree, window, cx),
             Act::OpenWorktrees => self.open_worktrees(),
+            Act::DockPane(id) => self.dock_pick(id, window, cx),
         }
         cx.notify();
     }

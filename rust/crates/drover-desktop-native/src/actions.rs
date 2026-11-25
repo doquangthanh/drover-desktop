@@ -128,11 +128,6 @@ impl DroverApp {
         app.show_when_known = Some(id);
     }
 
-    /// A shell in a new tab, in `cwd` (the Changes view's "Terminal here"); it is shown once it exists.
-    pub fn open_shell_in(&mut self, cwd: &str) {
-        self.rpc_then("pane.create", json!({"command": "", "cwd": cwd}), Self::focus_created);
-    }
-
     pub fn new_tab(&mut self, cx: &mut Context<Self>) {
         trace("button: new tab");
         self.start_in_space("", None, cx);

@@ -41,11 +41,9 @@ pub struct ChangesState {
     keys: [String; 3],
 }
 
-/// Fields of the view: the base to compare against, a commit message, a new task worktree's name.
+/// Fields of the view: the base to compare against (commit message and task name are asked in the picker).
 pub struct ChangesInputs {
     pub base: Entity<TextInput>,
-    pub commit: Entity<TextInput>,
-    pub task: Entity<TextInput>,
     /// The review comment being written (review_view.rs), and the review diff's keyboard focus (F7, A).
     pub comment: Entity<TextInput>,
     pub review_focus: gpui::FocusHandle,
@@ -54,14 +52,10 @@ pub struct ChangesInputs {
 impl ChangesInputs {
     pub fn new(cx: &mut Context<DroverApp>) -> Self {
         let base = cx.new(|cx| TextInput::new("base branch", cx));
-        let commit = cx.new(|cx| TextInput::new("Commit message", cx));
-        let task = cx.new(|cx| TextInput::new("New task worktree", cx));
         let comment = cx.new(TextInput::new_multiline);
         cx.subscribe(&comment, |app, _, ev, cx| if let InputEvent::Submit = ev { app.review_submit_draft(cx) }).detach();
         cx.subscribe(&base, |_, _, ev, cx| if let InputEvent::Submit = ev { cx.notify() }).detach();
-        cx.subscribe(&commit, |app, _, ev, cx| if let InputEvent::Submit = ev { app.changes_commit(cx) }).detach();
-        cx.subscribe(&task, |app, _, ev, cx| if let InputEvent::Submit = ev { app.changes_new_worktree(cx) }).detach();
-        ChangesInputs { base, commit, task, comment, review_focus: cx.focus_handle() }
+        ChangesInputs { base, comment, review_focus: cx.focus_handle() }
     }
 }
 
@@ -83,9 +77,10 @@ pub fn shown(app: &DroverApp, cx: &gpui::App) -> (Option<String>, String, Option
     // The focused pane's worktree (set from git.info), or one picked in the Worktrees tab.
     let path = app.changes.picked_path.clone().or_else(|| changes::shown_path(None, trees));
     let base = changes::base(&app.changes_in.base.read(cx).text, trees);
-    // Only a file the user opened (the list shows until then), and only while it still has changes.
+    // As the web: the picked file while it still has changes, else the first changed one.
     let file = match &app.changes.files {
-        Some(Ok(files)) => app.changes.picked_file.clone().filter(|f| files.iter().any(|x| &x.path == f)),
+        Some(Ok(files)) => app.changes.picked_file.clone().filter(|f| files.iter().any(|x| &x.path == f))
+            .or_else(|| files.first().map(|x| x.path.clone())),
         _ => None,
     };
     (path, base, file)
@@ -155,14 +150,10 @@ impl DroverApp {
         self.rpc_reply(method, params, move |app, r| app.changes_done(label, r));
     }
 
-    pub fn changes_commit(&mut self, cx: &mut Context<Self>) {
-        let message = self.changes_in.commit.read(cx).text.trim().to_string();
+    pub fn changes_commit(&mut self, message: String, cx: &mut Context<Self>) {
         let (Some(path), _, _) = shown(self, cx) else { return };
-        if message.is_empty() {
-            self.changes.output = Some(("Type a commit message first.".into(), true));
-        } else {
-            self.changes_run("Commit", "git.commit", json!({"path": path, "message": message}));
-            self.changes_in.commit.update(cx, |i, cx| i.set_text("", cx));
+        if !message.is_empty() {
+            self.changes_run("Commit…", "git.commit", json!({"path": path, "message": message}));
         }
         cx.notify();
     }
@@ -176,14 +167,12 @@ impl DroverApp {
         });
     }
 
-    pub fn changes_new_worktree(&mut self, cx: &mut Context<Self>) {
-        let task = self.changes_in.task.read(cx).text.trim().to_string();
+    pub fn changes_new_worktree(&mut self, task: String, cx: &mut Context<Self>) {
         let Some(Ok(info)) = self.changes.info.clone() else { return };
         if task.is_empty() {
             return;
         }
         let (_, base, _) = shown(self, cx);
-        self.changes_in.task.update(cx, |i, cx| i.set_text("", cx));
         let params = with_machine(self, json!({"repo": info.root, "task": task, "base": base}));
         self.rpc_reply("worktree.create", params, |app, r| {
             if let Ok(v) = &r {
@@ -208,10 +197,10 @@ pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
                 .or_else(|| path.clone().map(|p| Worktree { path: p, ..Default::default() }));
             if crate::views::panel::is_wide(app, crate::views::View::Changes) {
                 // As the web: the worktrees (300 px) beside the branch, checks, files and diff.
-                return gpui::div().flex().flex_row().flex_1().min_h_0().min_w_0()
-                    .child(gpui::div().w(crate::ui_scale::px(300.)).flex_none().flex().flex_col().min_h_0()
-                        .border_r_1().border_color(crate::theme::border()).child(worktrees::panel(app, trees, path.as_deref(), cx)))
-                    .child(gpui::div().flex().flex_col().flex_1().min_w_0().min_h_0().child(main_panel::panel(app, current().as_ref(), &base, file.as_deref(), cx)));
+                let card = |d: Div| d.flex().flex_col().min_h_0().min_w_0().rounded(crate::ui_scale::px(10.)).overflow_hidden().border_1().bg(gpui::rgb(crate::theme::pane()));
+                return gpui::div().flex().flex_row().flex_1().min_h_0().min_w_0().gap(crate::ui_scale::px(8.)).p(crate::ui_scale::px(8.))
+                    .child(card(gpui::div().w(crate::ui_scale::px(300.)).flex_none()).border_color(crate::theme::border()).child(worktrees::panel(app, trees, path.as_deref(), cx)))
+                    .child(card(gpui::div().flex_1()).border_color(gpui::rgb(crate::theme::accent())).child(main_panel::panel(app, current().as_ref(), &base, file.as_deref(), cx)));
             }
             if app.changes.show_trees {
                 worktrees::panel(app, trees, path.as_deref(), cx)

@@ -41,7 +41,7 @@ fn node_view(app: &DroverApp, node: &Node, tab: &str, path: String, cx: &mut Con
     match node {
         Node::Pane { pane } => match app.stopped.iter().find(|s| &s.id == pane).filter(|_| app.store.pane(pane).is_none()) {
             Some(s) => crate::stopped::card(s, cx).into_any_element(),
-            None => pane_frame(app, pane, cx).into_any_element(),
+            None => pane_frame(app, pane, false, cx).into_any_element(),
         },
         Node::Split { split, ratio, a, b } => {
             let row = matches!(split, Dir::Row);
@@ -69,7 +69,8 @@ fn node_view(app: &DroverApp, node: &Node, tab: &str, path: String, cx: &mut Con
     }
 }
 
-fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Div {
+/// `bare`: only the terminal (the Files view's agent dock has its own header).
+pub fn pane_frame(app: &DroverApp, pane_id: &str, bare: bool, cx: &mut Context<DroverApp>) -> Div {
     let (name, state, kind, cwd, exit) = app.store.pane(pane_id)
         .map(|p| (p.name.clone(), p.state.clone(), p.kind.clone(), p.cwd.clone(), p.exit_code)).unwrap_or_default();
     let focused = app.focused.as_deref() == Some(pane_id);
@@ -96,7 +97,7 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
             app.open_menu(ev.position, crate::context_menu::pane_items(&menu_id, true), cx);
         }))
         .on_scroll_wheel(cx.listener(move |app, ev, _, cx| app.on_wheel(&wheel_id, ev, cx)))
-        .child(div().h(px(30.)).flex_none().flex().items_center().gap(px(8.)).pl(px(10.)).pr(px(6.))
+        .children((!bare).then(|| div().h(px(30.)).flex_none().flex().items_center().gap(px(8.)).pl(px(10.)).pr(px(6.))
             .border_b_1().border_color(theme::border()).text_size(px(12.)).font_family(theme::UI_FONT)
             .child(kind_icon(&kind))
             .child(div().flex_none().font_weight(gpui::FontWeight::MEDIUM).child(name))
@@ -105,7 +106,7 @@ fn pane_frame(app: &DroverApp, pane_id: &str, cx: &mut Context<DroverApp>) -> Di
             .child(hbtn("split").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.split(&split_id, "row"); })))
             .child(hbtn("splitdown").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.split(&down_id, "col"); })))
             .child(hbtn("zoom").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.toggle_zoom(&zoom_id); cx.notify(); })))
-            .child(hbtn("close").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_pane(&close_id, cx); }))))
+            .child(hbtn("close").on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.ask_close_pane(&close_id, cx); })))))
         .children(crate::review_banner::banner(app, pane_id, cx))
         .child(div().flex().flex_1().min_h_0().min_w_0().pt(px(10.)).pr(px(6.)).pb(px(6.)).pl(px(14.))
             .when(on_link, |d| d.cursor_pointer()).when(!on_link, |d| d.cursor_text())

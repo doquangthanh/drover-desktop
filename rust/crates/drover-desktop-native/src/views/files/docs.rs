@@ -44,11 +44,15 @@ pub struct Docs {
     pub closing: Option<String>,
     /// Ctrl+J: the editor takes the width, the agent's terminal stays as a narrow column beside it.
     pub wide: bool,
+    /// The agent beside the editor: shown (the web's default) or folded to its "Agent ▸" tab, and which pane it shows
+    /// (None: the focused agent, else the first one).
+    pub dock: bool,
+    pub dock_pane: Option<String>,
 }
 
 impl Docs {
     /// `wide` starts on: Files opens as the web's tree | editor | agent (Ctrl+J narrows it).
-    pub fn new() -> Self { Docs { wide: true, ..Default::default() } }
+    pub fn new() -> Self { Docs { wide: true, dock: true, ..Default::default() } }
 }
 
 pub fn key(scope: &str, path: &str) -> String { format!("{scope}|{path}") }
@@ -152,13 +156,16 @@ impl DroverApp {
 
     /// Alt+S: paste the selection (path:lines and the code) into an agent of this space, without Enter.
     pub fn files_send_selection(&mut self, cx: &mut Context<Self>) {
-        let Some(doc) = self.shown_doc() else { return };
+        let Some(doc) = self.shown_doc() else { return self.toasts.error("Open a file in the editor first: nothing to send.".into()) };
         let (a, b, text) = doc.editor.read(cx).selection_lines();
         let path = self.files.file.clone().unwrap_or_default();
         let space = self.files.space_id.clone();
         let agents: Vec<&drover_proto::wire::Pane> = self.store.panes.iter()
             .filter(|p| p.space_id == space && p.kind != "shell" && p.state != "exited").collect();
-        let pane = agents.iter().find(|p| Some(&p.id) == self.focused.as_ref()).or(agents.first()).map(|p| (p.id.clone(), p.name.clone()));
+        // The agent shown beside the editor first, else the focused one, else the first.
+        let docked = self.docs.dock_pane.as_ref();
+        let pane = agents.iter().find(|p| Some(&p.id) == docked).or_else(|| agents.iter().find(|p| Some(&p.id) == self.focused.as_ref()))
+            .or(agents.first()).map(|p| (p.id.clone(), p.name.clone()));
         let Some((pane, name)) = pane else { return self.toasts.error("No agent in this space: run claude, codex… in a terminal first.".into()) };
         let data = marks::as_paste(&marks::format_selection(&path, a, b, &text));
         let _ = self.client.commands.send(drover_proto::client::Command::Input { pane, data });

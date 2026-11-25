@@ -1,5 +1,5 @@
 //! Changes view, left panel (`worktree-list.tsx`): one row per worktree (the agent working in it, its branch and
-//! how many files it changed), then Terminal here / Remove for a task worktree, Clean up, and a new task worktree.
+//! how many files it changed), then Agent here / Remove for a task worktree and Clean up.
 
 use drover_proto::changes::Worktree;
 use drover_proto::wire::Pane;
@@ -71,17 +71,12 @@ pub fn panel(app: &DroverApp, trees: &[Worktree], path: Option<&str>, cx: &mut C
             })));
     }
     if let Some(t) = current.filter(|i| *i > 0).map(|i| &trees[i]) {
-        let (here, dirty) = (t.path.clone(), t.changes.unwrap_or(0) > 0);
+        let dirty = t.changes.unwrap_or(0) > 0;
         foot = foot.child(div().flex().gap(px(8.))
             .child(ui::button("Agent here", Kind::Plain).on_mouse_down(MouseButton::Left, {
                 let cwd = t.path.clone();
                 cx.listener(move |app, ev: &gpui::MouseDownEvent, _, cx| { app.open_agent_here_menu(ev.position, cwd.clone()); cx.notify(); })
             }))
-            .child(ui::button("Terminal here", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, window, cx| {
-                app.open_shell_in(&here);
-                window.focus(&app.term_focus);
-                cx.notify();
-            })))
             .child(ui::button("Remove", Kind::Danger).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| {
                 app.changes.confirm_remove = true;
                 cx.notify();
@@ -111,8 +106,5 @@ pub fn panel(app: &DroverApp, trees: &[Worktree], path: Option<&str>, cx: &mut C
                     })))));
         }
     }
-    foot = foot.child(div().flex().gap(px(8.))
-        .child(div().flex_1().child(app.changes_in.task.clone()))
-        .child(ui::button("New", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| app.changes_new_worktree(cx)))));
     div().flex().flex_col().flex_1().min_h_0().child(list).child(foot)
 }

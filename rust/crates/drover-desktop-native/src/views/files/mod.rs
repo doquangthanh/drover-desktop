@@ -4,6 +4,7 @@
 //! what changed.
 
 mod content;
+pub mod dock;
 pub mod docs;
 mod tree;
 
@@ -197,9 +198,21 @@ pub fn tick(app: &mut DroverApp) -> bool {
     }
     let Some(sc) = crate::views::panel::scope(app) else { return false };
     if sc.key != app.files.space {
-        app.files = FilesState { space: sc.key, space_id: sc.space, pane: sc.pane, cwd: sc.cwd, ..Default::default() };
-        app.files_load_dir("");
-        app.files_poll();
+        // Keep what the folder left showed; one seen before comes back as it was and is refreshed by the poll.
+        let fresh = FilesState { space: sc.key.clone(), space_id: sc.space, pane: sc.pane, cwd: sc.cwd, ..Default::default() };
+        let left = std::mem::replace(&mut app.files, fresh);
+        if !left.space.is_empty() { app.files_cache.insert(left.space.clone(), left); }
+        match app.files_cache.remove(&sc.key) {
+            Some(mut back) => {
+                back.pane = app.files.pane.take();
+                app.files = back;
+                // Replies that came while it was away were dropped: read the root (if it never arrived), the open
+                // folders, the status and the shown file again.
+                if !app.files.dirs.contains_key("") { app.files_load_dir(""); }
+                app.files_reload();
+            }
+            None => { app.files_load_dir(""); app.files_poll(); }
+        }
         return true;
     }
     if app.files.polled.is_none_or(|t| t.elapsed() > Duration::from_secs(3)) {
@@ -221,9 +234,11 @@ pub fn panel_body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         // As the web: the tree (320 px) and the open file, or a hint, side by side.
         let right = if app.files.file.is_some() { content::panel(app, cx) }
             else { div().flex().flex_1().min_w_0().min_h_0().child(ui::note("Pick a file on the left to read or edit it.", false)) };
-        return div().flex().flex_row().flex_1().min_h_0().min_w_0()
-            .child(div().w(crate::ui_scale::px(320.)).flex_none().flex().flex_col().min_h_0().border_r_1().border_color(crate::theme::border()).child(tree::panel(app, &name, cx)))
-            .child(right);
+        // Each part is its own rounded card with a gap between, the editor's border in the accent colour.
+        let card = |d: Div| d.flex().flex_col().min_h_0().min_w_0().rounded(crate::ui_scale::px(10.)).overflow_hidden().border_1().bg(gpui::rgb(crate::theme::pane()));
+        return div().flex().flex_row().flex_1().min_h_0().min_w_0().gap(crate::ui_scale::px(8.)).p(crate::ui_scale::px(8.)).pr(crate::ui_scale::px(0.))
+            .child(card(div().w(crate::ui_scale::px(320.)).flex_none()).border_color(crate::theme::border()).child(tree::panel(app, &name, cx)))
+            .child(card(div().flex_1()).border_color(gpui::rgb(crate::theme::accent())).child(right));
     }
     if app.files.file.is_some() {
         return content::panel(app, cx);
