@@ -6,11 +6,14 @@
 mod actions;
 mod code_editor;
 mod assets;
+mod broadcast;
 mod context_menu;
 mod copy_mode;
 mod dialogs;
 mod drag;
 mod find;
+mod folder_picker;
+mod folder_picker_logic;
 mod font_fallback;
 mod font_prefs;
 mod keymap;

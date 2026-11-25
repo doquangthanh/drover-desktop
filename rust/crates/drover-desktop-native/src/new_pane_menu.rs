@@ -30,6 +30,7 @@ fn entries(kinds: &[Value]) -> Vec<Entry> {
     out.extend([
         Entry::Rule,
         line("New space", Icon::Name("plus"), "", Act::NewSpace),
+        line("New space in a folder…", Icon::Name("folder"), "", Act::NewSpaceInFolder),
         line("New worktree…", Icon::Name("branch"), "", Act::NewWorktree),
         line("Open worktree…", Icon::Name("branch"), "", Act::OpenWorktrees),
     ]);
