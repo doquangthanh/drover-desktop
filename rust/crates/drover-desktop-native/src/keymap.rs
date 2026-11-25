@@ -20,7 +20,7 @@ use crate::picker::Cmd;
 use crate::toasts::{Target, Tone};
 use crate::workspace_app::DroverApp;
 
-pub const IDS: [(&str, Cmd); 42] = [
+pub const IDS: [(&str, Cmd); 46] = [
     ("commands", Cmd::Palette), ("jump", Cmd::Jump), ("peek", Cmd::Peek), ("find", Cmd::Find), ("rename", Cmd::Rename), ("rename_space", Cmd::RenameSpace),
     ("rename_tab", Cmd::RenameTab), ("copy_mode", Cmd::CopyMode), ("clear_pane", Cmd::ClearPane), ("select_all", Cmd::SelectAll),
     ("new_tab", Cmd::NewTab), ("close_tab", Cmd::CloseTab), ("next_tab", Cmd::NextTab), ("previous_tab", Cmd::PrevTab),
@@ -31,7 +31,7 @@ pub const IDS: [(&str, Cmd); 42] = [
     ("text_bigger", Cmd::ZoomIn), ("text_smaller", Cmd::ZoomOut), ("text_normal", Cmd::ZoomReset), ("interface_bigger", Cmd::AppZoomIn),
     ("interface_smaller", Cmd::AppZoomOut), ("interface_normal", Cmd::AppZoomReset), ("whats_new", Cmd::WhatsNew),
     ("feedback", Cmd::Feedback), ("reload_config", Cmd::ReloadConfig), ("wide_editor", Cmd::WideEditor), ("send_selection", Cmd::SendSelection),
-    ("quickfix", Cmd::Quickfix),
+    ("quickfix", Cmd::Quickfix), ("broadcast", Cmd::Broadcast), ("open_folder", Cmd::OpenFolder), ("chats", Cmd::Chats), ("new_chat", Cmd::NewChat),
 ];
 
 /// What a chord does: a built-in command, or a plugin action ("plugin.id.action").

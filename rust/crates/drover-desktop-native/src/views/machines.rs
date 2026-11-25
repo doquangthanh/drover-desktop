@@ -36,7 +36,7 @@ impl MachinesForm {
         cx.subscribe(&target, |app, _, ev, cx| match ev {
             InputEvent::Submit => app.machine_add(cx),
             InputEvent::Changed => cx.notify(),
-            InputEvent::Cancel => {}
+            InputEvent::Cancel | InputEvent::Pick(_) | InputEvent::PasteImage => {}
         }).detach();
         MachinesForm { open: false, alias, target, port, key, install: false, hosts: crate::ssh_hosts::detect(), more: false, log: None }
     }

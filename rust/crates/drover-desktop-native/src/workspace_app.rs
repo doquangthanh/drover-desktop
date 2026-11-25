@@ -90,6 +90,12 @@ pub struct DroverApp {
     /// Ctrl+K was pressed: the next key finishes the chord (keys.rs).
     pub chord: bool,
     pub show_shortcuts: bool,
+    /// The "Send to several agents" dialog, when open (broadcast.rs).
+    pub broadcast: Option<crate::broadcast::Broadcast>,
+    /// Chats and their transcripts (chat/).
+    pub chat: crate::chat::ChatState,
+    /// The "Choose a folder" dialog, when open (folder_picker.rs).
+    pub folder_picker: Option<crate::folder_picker::FolderPicker>,
     pub picker: Option<crate::picker::Picker>,
     /// The pane shown in the peek pop-up (peek.rs): looked at, not focused.
     pub peek: Option<String>,
@@ -215,7 +221,7 @@ impl DroverApp {
                     settings: Default::default(), machines_form, rules: Default::default(), whats_new: Default::default(), feedback,
                     code_family: crate::font_fallback::BUNDLED_MONO.into(), panels: HashMap::new(),
                     panel_width: 440., sidebar_width: crate::theme_data::layout::SIDEBAR_WIDTH, drag: None, split_bounds: Arc::default(),
-                    chord: false, show_shortcuts: false, picker: None, peek: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
+                    chord: false, show_shortcuts: false, broadcast: None, chat: Default::default(), folder_picker: None, picker: None, peek: None, want_term_focus: true, area: Area::Pane, menu: None, copy_mode: None, keymap: Default::default(), keymap_loaded: false, ui: Default::default(), window_title: String::new(), wheel_rest: 0.0, graphics: Default::default(), cell_size: (8., 17.), plugins: vec![],
                     toasts: Default::default(), fired: Default::default(), inbox_machine: String::new(), window_active: true, settled: Default::default(), folds: Default::default(), sidebar_scroll: [gpui::ScrollHandle::new(), gpui::ScrollHandle::new()], base_size: 13.0, font_own: crate::font_prefs::load_from(&crate::font_prefs::path()), mouse_reporting: None, mouse_last: None, mouse_click: None, copied_out: None, relaunch: false, daemon_font: (String::new(), 0.0), font_form, settings_editor, theme_choice: "dark".into(), daemon_theme: String::new(), zoom: 0.0 }
     }
 
@@ -239,6 +245,7 @@ impl DroverApp {
                     }
                     self.toast_for_event(&name, &data);
                     self.store.apply(&name, &data);
+                    self.chat.apply_event(&name, &data);
                     self.fit_screens();
                 }
                 Incoming::Output { pane, data, replay } => self.feed(&pane, &data, replay),
@@ -494,6 +501,8 @@ impl Render for DroverApp {
         let overlay = crate::dialogs::confirm_overlay(self, cx).or_else(|| crate::picker::overlay(self, cx))
             .or_else(|| crate::context_menu::overlay(self, view_size, cx))
             .or_else(|| crate::peek::overlay(self, view_size, cx))
+            .or_else(|| crate::broadcast::overlay(self, cx))
+            .or_else(|| crate::folder_picker::overlay(self, cx))
             .or_else(|| crate::dialogs::shortcuts_overlay(self, cx))
             .or_else(|| crate::views::machines_add_dialog::overlay(self, cx));
         div()
