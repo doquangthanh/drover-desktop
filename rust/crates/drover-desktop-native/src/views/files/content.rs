@@ -38,7 +38,7 @@ fn tabs(app: &DroverApp, file: &str, cx: &mut Context<DroverApp>) -> gpui::State
         row = row.child(div().h(px(28.)).flex_none().flex().items_center().gap(px(6.)).pl(px(10.)).pr(px(4.)).rounded_t(px(6.))
             .text_size(px(12.)).text_color(rgb(if on { fg() } else { muted() })).when(on, |d| d.bg(rgb(theme::pane())))
             .hover(|d| d.bg(theme::hover()))
-            .child(crate::file_icons::file_badge(&name))
+            .child(crate::file_icons::file_icon(&name, false, false))
             .child(name)
             .child(div().size(px(16.)).rounded(px(4.)).flex().items_center().justify_center().text_color(rgb(if dirty { fg() } else { dim() }))
                 .hover(|d| d.bg(theme::selected())).child(if dirty { "●" } else { "×" })
