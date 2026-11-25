@@ -36,6 +36,7 @@ pub enum View {
     Machines,
     WhatsNew,
     Feedback,
+    Chat,
 }
 
 impl View {
@@ -50,6 +51,7 @@ impl View {
             View::Machines => "Machines",
             View::WhatsNew => "What's new",
             View::Feedback => "Feedback",
+            View::Chat => "Chats",
         }
     }
 
@@ -64,6 +66,7 @@ impl View {
             View::Machines => "server",
             View::WhatsNew => "info",
             View::Feedback => "more",
+            View::Chat => "chat",
         }
     }
 
@@ -82,7 +85,7 @@ impl View {
             View::Inbox => "inbox",
             View::Settings => "settings",
             View::Machines => "machines",
-            View::WhatsNew | View::Feedback => "",
+            View::WhatsNew | View::Feedback | View::Chat => "",
         }
     }
 }
@@ -118,6 +121,7 @@ pub fn body(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
         View::Machines => machines::body(app, cx),
         View::WhatsNew => whats_new::body(app, cx),
         View::Feedback => feedback::body(app, cx),
+        View::Chat => crate::chat::view::body(app, cx),
         _ => ui::note(format!("{} is not drawn here yet.", view.title()), false),
     };
     div().flex().flex_col().flex_1().min_h_0().min_w_0().child(head).child(content)

@@ -19,6 +19,8 @@ pub enum Act {
     Copy, Paste, SelectAll, ClearPane,
     // The tab bar's + menu (new_pane_menu.rs): the String of StartAgent is the agent's command.
     NewShell, StartAgent(String), NewSpace, NewSpaceInFolder, NewWorktree, OpenWorktrees,
+    // The chat box: the String is a permission mode / a model value (empty = the agent's own).
+    ChatMode(String), ChatModel(String),
 }
 
 /// What a menu line shows on its left: a line icon by name, or an agent kind's badge.
@@ -116,6 +118,8 @@ impl DroverApp {
             Act::StartAgent(command) => self.start_in_space(&command, None, cx),
             Act::NewSpace => self.new_space(cx),
             Act::NewSpaceInFolder => self.open_folder_picker(window, cx),
+            Act::ChatMode(m) => self.set_chat_mode(&m),
+            Act::ChatModel(m) => self.set_chat_model(&m),
             Act::NewWorktree => self.open_picker(Kind::NewWorktree, window, cx),
             Act::OpenWorktrees => self.open_worktrees(),
         }

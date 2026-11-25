@@ -13,6 +13,7 @@ const ICONS: &[(&str, &str)] = &[
     ("inbox", r#"<path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/>"#),
     ("gear", r#"<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>"#),
     ("folder", r#"<path d="M3 7h6l2 2h10v10H3z"/>"#),
+    ("chat", r#"<path d="M4 5h16v11H10l-6 4z"/>"#),
     ("plus", r#"<path d="M12 5v14M5 12h14"/>"#),
     ("split", r#"<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>"#),
     ("splitdown", r#"<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 12h18"/>"#),

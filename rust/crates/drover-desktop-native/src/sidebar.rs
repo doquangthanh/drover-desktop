@@ -177,6 +177,7 @@ pub fn sidebar(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let foot = div().flex_none().border_t_1().border_color(theme::border()).pt(px(4.)).px(px(8.)).pb(px(8.))
         .child(foot_row(View::Inbox).when(blocked > 0, |d| d.child(div().text_size(px(11.)).text_color(rgb(crate::theme::blocked())).child(blocked.to_string())))
             .on_mouse_down(MouseButton::Left, show(View::Inbox)))
+        .child(foot_row(View::Chat).on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.open_chat_view(window, cx))))
         .child(foot_row(View::Machines).on_mouse_down(MouseButton::Left, show(View::Machines)))
         .child(foot_row(View::Settings).on_mouse_down(MouseButton::Left, show(View::Settings)));
 
