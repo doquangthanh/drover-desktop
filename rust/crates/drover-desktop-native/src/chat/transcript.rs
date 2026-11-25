@@ -56,7 +56,7 @@ fn permission_card(item: &Item, mono: &SharedString, cx: &mut Context<DroverApp>
         ui::button(label, kind).on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { app.answer_permission(&id, allow, always); cx.notify(); }))
     };
     div().flex().flex_col().gap(px(8.)).p(px(12.)).rounded(px(9.)).border_1()
-        .border_color(if pending { rgb(blocked()).into() } else { theme::border2() }).bg(theme::ink(0.03))
+        .border_color(if pending { rgb(blocked()) } else { theme::border2() }).bg(theme::ink(0.03))
         .child(div().text_size(px(13.5)).font_weight(FontWeight::MEDIUM).text_color(rgb(fg())).child(item.title.clone().unwrap_or_else(|| logic::permission_question(item))))
         .when_some(item.detail.clone(), |d, t| d.child(div().text_size(px(12.)).text_color(rgb(muted())).child(t)))
         .when_some(command, |d, c| d.child(text_block(&c, mono)))

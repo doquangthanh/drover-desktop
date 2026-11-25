@@ -25,7 +25,7 @@ impl DroverApp {
         let space_name = |id: &str| self.store.spaces.iter().find(|s| s.id == id).map(|s| s.name.clone()).unwrap_or_default();
         let panes = live.iter().map(|p| (p.id.clone(), p.name.clone(), space_name(&p.space_id))).collect();
         let on = live.iter().filter(|p| p.kind != "shell").map(|p| p.id.clone()).collect();
-        let text = cx.new(|cx| TextInput::new_multiline(cx));
+        let text = cx.new(TextInput::new_multiline);
         cx.subscribe(&text, |app, _, ev, cx| if matches!(ev, InputEvent::Submit) { app.send_broadcast(cx) }).detach();
         window.focus(&text.read(cx).focus_handle(cx));
         self.broadcast = Some(Broadcast { text, panes, on });
@@ -59,8 +59,10 @@ fn agent_row(id: &str, name: &str, space: &str, on: bool, cx: &mut Context<Drove
         .child(div().flex_1().min_w_0().truncate().text_size(px(13.)).text_color(rgb(fg())).child(name.to_string()))
         .child(div().text_size(px(12.)).text_color(rgb(dim())).child(space.to_string()))
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| {
-            if let Some(b) = &mut app.broadcast {
-                if !b.on.remove(&id) { b.on.insert(id.clone()); }
+            if let Some(b) = &mut app.broadcast
+                && !b.on.remove(&id)
+            {
+                b.on.insert(id.clone());
             }
             cx.notify();
         }))
