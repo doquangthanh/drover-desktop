@@ -3,6 +3,7 @@
 use gpui::{Context, Div, FontWeight, MouseButton, MouseDownEvent, div, prelude::*, rgb};
 
 use super::options::MODES;
+use crate::context_menu::{Act, item};
 use super::{transcript, types::Chat};
 use crate::theme::{self, blocked, dim, fg, muted, working};
 use crate::ui_scale::px;
@@ -14,7 +15,7 @@ fn mode_label(mode: &str) -> &str { MODES.iter().find(|(m, _)| *m == mode).map_o
 
 fn suggestions(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
     let rows = app.chat.suggest.iter().enumerate().map(|(i, (label, note))| {
-        ui::row(false).h(px(26.)).text_size(px(12.5)).child(div().flex_none().text_color(rgb(fg())).child(label.clone()))
+        ui::row(i == app.chat.suggest_sel).h(px(26.)).text_size(px(12.5)).child(div().flex_none().text_color(rgb(fg())).child(label.clone()))
             .child(div().flex_1().min_w_0().truncate().text_color(rgb(dim())).child(note.clone()))
             .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| app.apply_suggestion(i, cx)))
     }).collect::<Vec<_>>();
@@ -22,7 +23,7 @@ fn suggestions(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
 }
 
 fn chat_row(c: &Chat, on: bool, cx: &mut Context<DroverApp>) -> Div {
-    let id = c.id.clone();
+    let (id, menu_id) = (c.id.clone(), c.id.clone());
     let color = match c.state.as_str() { "blocked" => blocked(), "working" => working(), _ => dim() };
     ui::row(on).h(px(38.)).gap(px(9.))
         .child(div().size(px(8.)).flex_none().rounded_full().bg(rgb(color)))
@@ -30,6 +31,9 @@ fn chat_row(c: &Chat, on: bool, cx: &mut Context<DroverApp>) -> Div {
             .child(div().truncate().text_size(px(13.)).child(c.name.clone()))
             .child(div().truncate().text_size(px(11.)).text_color(rgb(dim())).child(crate::folder_picker_logic::base_name(&c.cwd).to_string())))
         .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| { app.open_chat(&id); app.chat.stick.set(true); cx.notify(); }))
+        .on_mouse_down(MouseButton::Right, cx.listener(move |app, ev: &MouseDownEvent, _, cx| {
+            app.open_menu(ev.position, vec![item("Rename chat", Act::ChatRename(menu_id.clone())), item("Delete chat", Act::ChatRemove(menu_id.clone()))], cx);
+        }))
 }
 
 fn list(app: &DroverApp, cx: &mut Context<DroverApp>) -> Div {
@@ -51,6 +55,10 @@ fn composer(app: &DroverApp, chat: &Chat, cx: &mut Context<DroverApp>) -> Div {
     };
     div().flex_none().flex().flex_col().gap(px(6.)).px(px(24.)).pb(px(14.)).pt(px(8.)).border_t_1().border_color(theme::border())
         .when(!app.chat.suggest.is_empty(), |d| d.child(suggestions(app, cx)))
+        .when(!app.chat.images.is_empty(), |d| d.child(div().flex().items_center().gap(px(8.)).text_size(px(12.)).text_color(rgb(muted()))
+            .child(format!("{} picture(s) attached", app.chat.images.len()))
+            .child(div().px(px(6.)).rounded(px(5.)).hover(|d| d.bg(theme::hover())).child("Remove")
+                .on_mouse_down(MouseButton::Left, cx.listener(|app, _, _, cx| { app.chat.images.clear(); cx.notify(); })))))
         .child(div().min_h(px(44.)).max_h(px(160.)).overflow_hidden().child(input))
         .child(div().flex().items_center().gap(px(10.)).text_size(px(12.)).text_color(rgb(muted()))
             .child(div().px(px(6.)).py(px(2.)).rounded(px(5.)).hover(|d| d.bg(theme::hover())).child(format!("{} ▾", mode_label(&chat.permission_mode)))

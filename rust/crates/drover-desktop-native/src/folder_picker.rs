@@ -5,6 +5,7 @@
 use gpui::{Context, Div, Entity, Focusable, FontWeight, MouseButton, MouseDownEvent, Window, div, prelude::*, rgb, rgba};
 use serde_json::json;
 
+use crate::context_menu::{Act, item};
 use crate::folder_picker_logic::{self as logic, DirListing};
 use crate::theme::{self, dim, fg, muted, UI_FONT};
 use crate::ui_scale::px;
@@ -20,6 +21,8 @@ pub struct FolderPicker {
     pub chosen: Option<String>,
     pub filter: Entity<TextInput>,
     pub error: Option<String>,
+    /// The "New folder" name field, shown while a folder is being made.
+    pub new_name: Option<Entity<TextInput>>,
 }
 
 impl DroverApp {
@@ -31,7 +34,7 @@ impl DroverApp {
         let filter = cx.new(|cx| TextInput::new("Filter folders", cx));
         cx.subscribe(&filter, |_, _, ev, cx| if matches!(ev, InputEvent::Changed) { cx.notify() }).detach();
         window.focus(&filter.read(cx).focus_handle(cx));
-        self.folder_picker = Some(FolderPicker { machine, listing: None, chosen: None, filter, error: None });
+        self.folder_picker = Some(FolderPicker { machine, listing: None, chosen: None, filter, error: None, new_name: None });
         self.folder_list(&start, cx);
     }
 
@@ -44,17 +47,65 @@ impl DroverApp {
     /// List the sub-folders of `path` ("" = the first allowed root) and show them.
     pub fn folder_list(&mut self, path: &str, cx: &mut Context<Self>) {
         let Some(f) = &self.folder_picker else { return };
+        f.filter.update(cx, |i, cx| i.set_text("", cx)); // a filter for the old folder would hide the new one's rows
+        self.folder_request(path, None);
+        cx.notify();
+    }
+
+    /// Ask for the sub-folders of `path`; `pick` (a folder just made) is the one chosen, else the open folder itself.
+    fn folder_request(&mut self, path: &str, pick: Option<String>) {
+        let Some(f) = &self.folder_picker else { return };
         let mut params = json!({"path": path});
         if let Some(m) = &f.machine { params["machine"] = json!(m); }
-        f.filter.update(cx, |i, cx| i.set_text("", cx)); // a filter for the old folder would hide the new one's rows
-        self.rpc_reply("fs.list_dirs", params, |app, r| {
+        self.rpc_reply("fs.list_dirs", params, move |app, r| {
             if let Some(f) = &mut app.folder_picker {
                 match r.map(|v| DirListing::from_json(&v)) {
-                    Ok(Some(l)) => (f.chosen, f.listing, f.error) = (Some(l.path.clone()), Some(l), None),
+                    Ok(Some(l)) => (f.chosen, f.listing, f.error) = (pick.or_else(|| Some(l.path.clone())), Some(l), None),
                     Ok(None) => f.error = Some("unexpected reply from fs.list_dirs".into()),
                     Err(e) => f.error = Some(e),
                 }
             }
+        });
+    }
+
+    /// Switch to another machine (`None` = this computer) and list its first folder.
+    pub fn folder_machine(&mut self, machine: Option<String>, cx: &mut Context<Self>) {
+        if let Some(f) = &mut self.folder_picker { (f.machine, f.listing, f.chosen, f.new_name) = (machine, None, None, None); }
+        self.folder_list("", cx);
+    }
+
+    pub fn folder_machine_menu(&mut self, at: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        let now = self.folder_picker.as_ref().and_then(|f| f.machine.clone());
+        let mark = |on: bool| if on { "✓ " } else { "" };
+        let mut entries = vec![item(&format!("{}This computer", mark(now.is_none())), Act::FolderMachine(String::new()))];
+        for m in self.store.machines.as_array().into_iter().flatten().filter(|m| m["status"] == "connected") {
+            let alias = m["alias"].as_str().unwrap_or("").to_string();
+            entries.push(item(&format!("{}{alias}", mark(now.as_deref() == Some(alias.as_str()))), Act::FolderMachine(alias)));
+        }
+        self.open_menu(at, entries, cx);
+    }
+
+    /// "+ New folder": show the name field; Enter makes the folder inside the open one and picks it.
+    pub fn folder_new_start(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.folder_picker.as_ref().is_none_or(|f| f.listing.is_none() || f.new_name.is_some()) { return; }
+        let input = cx.new(|cx| TextInput::new("New folder name", cx));
+        cx.subscribe(&input, |app, _, ev, cx| if matches!(ev, InputEvent::Submit) { app.folder_new_make(cx) }).detach();
+        window.focus(&input.read(cx).focus_handle(cx));
+        if let Some(f) = &mut self.folder_picker { f.new_name = Some(input); }
+        cx.notify();
+    }
+
+    fn folder_new_make(&mut self, cx: &mut Context<Self>) {
+        let Some(f) = &mut self.folder_picker else { return };
+        let (Some(input), Some(l)) = (f.new_name.take(), f.listing.as_ref()) else { return };
+        let name = input.read(cx).value().trim().to_string();
+        if name.is_empty() { return cx.notify(); }
+        let mut params = json!({"parent": l.path, "name": name});
+        if let Some(m) = &f.machine { params["machine"] = json!(m); }
+        let parent = l.path.clone();
+        self.rpc_reply("fs.mkdir", params, move |app, r| match r {
+            Ok(v) => app.folder_request(&parent, v["path"].as_str().map(String::from)),
+            Err(e) => if let Some(f) = &mut app.folder_picker { f.error = Some(e); },
         });
         cx.notify();
     }
@@ -127,13 +178,19 @@ pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .child(div().flex().items_center().gap(px(8.))
             .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(rgb(fg())).child("Choose a folder"))
-            .child(div().flex_1().text_size(px(12.)).text_color(rgb(muted())).child(format!("on {}", f.machine.as_deref().unwrap_or("this computer"))))
+            .child(div().flex_1().child(div().px(px(6.)).py(px(2.)).rounded(px(5.)).text_size(px(12.)).text_color(rgb(muted())).hover(|d| d.bg(theme::hover()))
+                .child(format!("on {} ▾", f.machine.as_deref().unwrap_or("this computer")))
+                .on_mouse_down(MouseButton::Left, cx.listener(|app, ev: &MouseDownEvent, _, cx| app.folder_machine_menu(ev.position, cx)))))
             .child(div().w(px(220.)).child(f.filter.clone())))
         .child(div().flex().gap(px(14.)).child(places).child(div().flex_1().min_w_0().flex().flex_col().gap(px(8.))
             .child(div().flex().items_center().gap(px(8.))
                 .child(ui::button("↑", Kind::Plain).when(parent.is_none(), |d| d.opacity(0.45))
                     .on_mouse_down(MouseButton::Left, cx.listener(move |app, _, _, cx| if let Some(p) = &up { app.folder_list(p, cx) })))
-                .child(div().flex_1().min_w_0().truncate().text_size(px(12.5)).text_color(rgb(fg())).child(here.clone())))
+                .child(div().flex_1().min_w_0().truncate().text_size(px(12.5)).text_color(rgb(fg())).child(here.clone()))
+                .child(match &f.new_name {
+                    Some(input) => div().w(px(200.)).child(input.clone()),
+                    None => div().child(ui::button("+ New folder", Kind::Plain).on_mouse_down(MouseButton::Left, cx.listener(|app, _, window, cx| app.folder_new_start(window, cx)))),
+                }))
             .child(list)))
         .child(div().flex().items_center().gap(px(8.))
             .child(div().flex_1().min_w_0().truncate().text_size(px(12.)).text_color(rgb(dim())).child(f.chosen.clone().unwrap_or(here)))

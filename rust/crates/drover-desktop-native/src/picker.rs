@@ -22,6 +22,8 @@ pub enum Kind {
     RenameSpace,
     RenameTab,
     RenameMachine,
+    /// The chat being renamed (chat/).
+    RenameChat,
     InstallPlugin,
     NewWorktree,
     /// Check errors (quickfix.rs): file:line of failed checks; Enter opens the file there.
@@ -124,7 +126,7 @@ impl DroverApp {
                 ("New name", p.name.clone())
             }
             Kind::RenameSpace | Kind::RenameTab => return self.rename_picked(window, cx),
-            Kind::RenameMachine => return,
+            Kind::RenameMachine | Kind::RenameChat => return,
             Kind::InstallPlugin => return self.open_plugin_install(window, cx),
             Kind::NewWorktree => ("Task name: a new branch dr/<task> in its own folder", String::new()),
             Kind::Quickfix => ("Filter the check errors…", String::new()),
@@ -142,7 +144,7 @@ impl DroverApp {
                 if app.picker.as_ref().is_some_and(|p| p.kind == Kind::Find) { app.find_step(true); }
                 cx.notify();
             }
-            InputEvent::Cancel => {}
+            InputEvent::Cancel | InputEvent::Pick(_) | InputEvent::PasteImage => {}
         }).detach();
         window.focus(&input.read(cx).focus_handle(cx));
         self.picker = Some(Picker { kind, input, selected: 0, pane: self.focused.clone(), note: None, target, query: text, fixes: vec![] });
@@ -197,7 +199,7 @@ impl DroverApp {
                 let at = f.line.map(|l| format!("{}:{l}", f.path)).unwrap_or_else(|| f.path.clone());
                 (Row::Fix(f.clone()), at, format!("{} · {}", f.step, f.text.chars().take(60).collect::<String>()), vec![])
             }).collect(),
-            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::InstallPlugin | Kind::NewWorktree | Kind::Find => vec![],
+            Kind::Rename | Kind::RenameSpace | Kind::RenameTab | Kind::RenameMachine | Kind::RenameChat | Kind::InstallPlugin | Kind::NewWorktree | Kind::Find => vec![],
         }
     }
 
@@ -226,6 +228,13 @@ impl DroverApp {
                 let name = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
                 if let (Some(old), false) = (self.picker.as_ref().and_then(|p| p.target.clone()), name.is_empty()) {
                     self.rename_machine(old, name);
+                }
+                self.close_picker(cx);
+            }
+            Kind::RenameChat => {
+                let name = self.picker.as_ref().map(|p| p.input.read(cx).text.trim().to_string()).unwrap_or_default();
+                if let (Some(id), false) = (self.picker.as_ref().and_then(|p| p.target.clone()), name.is_empty()) {
+                    self.rpc("chat.rename", json!({"chat": id, "name": name}));
                 }
                 self.close_picker(cx);
             }
@@ -352,7 +361,7 @@ impl DroverApp {
 
 pub fn overlay(app: &DroverApp, cx: &mut Context<DroverApp>) -> Option<Div> {
     let p = app.picker.as_ref()?;
-    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::Find => "Find in terminal", Kind::Quickfix => "Check errors" };
+    let title = match p.kind { Kind::Jump => "Jump to", Kind::Peek => "Peek at",Kind::Commands => "Commands", Kind::Rename => "Rename agent", Kind::RenameSpace => "Rename space", Kind::RenameTab => "Rename tab", Kind::RenameMachine => "Rename machine", Kind::RenameChat => "Rename chat", Kind::InstallPlugin => "Install a plugin", Kind::NewWorktree => "New worktree", Kind::Find => "Find in terminal", Kind::Quickfix => "Check errors" };
     let mut list = div().flex().flex_col().gap(px(1.)).max_h(px(420.)).overflow_hidden();
     // Keep the picked row on screen: 14 rows are drawn, from where the selection needs them.
     let first = p.selected.saturating_sub(13);

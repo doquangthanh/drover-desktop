@@ -15,6 +15,10 @@ pub enum InputEvent {
     Changed,
     Submit,
     Cancel,
+    /// While `suggesting` is set: Up (-1), Down (1), Tab or Enter (0) choose among the suggestions shown under the field.
+    Pick(i8),
+    /// Ctrl+V with a picture and no text on the clipboard, in a field with `accepts_images` (the chat box).
+    PasteImage,
 }
 
 pub struct TextInput {
@@ -31,6 +35,9 @@ pub struct TextInput {
     multiline: bool,
     /// A multi-line field where Enter sends (Shift+Enter breaks the line): the chat box.
     pub enter_sends: bool,
+    pub accepts_images: bool,
+    /// Set by the owner while it shows suggestions: arrows, Tab and Enter then pick one instead of editing.
+    pub suggesting: std::rc::Rc<std::cell::Cell<bool>>,
     /// Font of a multi-line editor (the code font); the app sets it every frame.
     pub family: Option<SharedString>,
     scroll: ScrollHandle,
@@ -55,7 +62,7 @@ impl Focusable for TextInput {
 impl TextInput {
     pub fn new(placeholder: &str, cx: &mut Context<Self>) -> Self {
         TextInput { text: String::new(), cursor: 0, marked: None, after_commit: vec![], focus: cx.focus_handle(), placeholder: placeholder.to_string().into(),
-                    multiline: false, enter_sends: false, family: None, scroll: ScrollHandle::new(), follow: false }
+                    multiline: false, enter_sends: false, accepts_images: false, suggesting: Default::default(), family: None, scroll: ScrollHandle::new(), follow: false }
     }
 
     pub fn new_multiline(cx: &mut Context<Self>) -> Self {
@@ -64,7 +71,7 @@ impl TextInput {
 
     /// The chat box: multi-line, Enter sends.
     pub fn new_chat_box(placeholder: &str, cx: &mut Context<Self>) -> Self {
-        TextInput { multiline: true, enter_sends: true, ..Self::new(placeholder, cx) }
+        TextInput { multiline: true, enter_sends: true, accepts_images: true, ..Self::new(placeholder, cx) }
     }
 
     fn line_bounds(&self, at: usize) -> (usize, usize) {
@@ -139,6 +146,8 @@ impl TextInput {
             "end" => self.cursor = if self.multiline { self.line_bounds(c).1 } else { self.text.len() },
             "up" | "down" if self.multiline => self.move_line(key == "down"),
             "tab" if self.multiline => self.edit(c..c, "  ", cx),
+            "up" | "down" if self.suggesting.get() => cx.emit(InputEvent::Pick(if key == "up" { -1 } else { 1 })),
+            "tab" | "enter" if self.suggesting.get() => cx.emit(InputEvent::Pick(0)),
             "enter" if self.multiline && (ctrl || (self.enter_sends && !shift)) => cx.emit(InputEvent::Submit),
             "enter" if self.multiline => self.edit(c..c, "\n", cx),
             "s" if ctrl && self.multiline => cx.emit(InputEvent::Submit),
@@ -149,8 +158,10 @@ impl TextInput {
                 return false; // also reaches the app: Escape leaves the view
             }
             "v" if ctrl => {
-                if let Some(t) = cx.read_from_clipboard().and_then(|i| i.text()) {
-                    self.edit(c..c, &t, cx);
+                match cx.read_from_clipboard().and_then(|i| i.text()) {
+                    Some(t) => self.edit(c..c, &t, cx),
+                    None if self.accepts_images => cx.emit(InputEvent::PasteImage),
+                    None => {}
                 }
             }
             "backspace" | "delete" | "tab" => {}

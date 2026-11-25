@@ -29,6 +29,7 @@ pub enum Then {
     CloseSpace(String),
     StopSubtree(String),
     RemoveMachine(String),
+    RemoveChat(String),
     UpdateApply(String),
     StopServer,
     InstallPlugin(String),
@@ -217,6 +218,7 @@ impl DroverApp {
                 Then::CloseSpace(id) => self.rpc("space.remove", json!({"space": id})),
                 Then::StopSubtree(id) => self.rpc("pane.close", json!({"pane": id, "subtree": true})),
                 Then::RemoveMachine(alias) => self.rpc("machine.remove", json!({"alias": alias})),
+                Then::RemoveChat(id) => self.rpc("chat.remove", json!({"chat": id})),
                 Then::StopServer => self.rpc("server.stop", json!({})),
                 Then::InstallPlugin(url) => self.install_plugin(url),
                 Then::UpdateApply(tag) => {

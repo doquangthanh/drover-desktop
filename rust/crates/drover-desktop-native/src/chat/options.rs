@@ -56,20 +56,22 @@ impl DroverApp {
         let (Some(id), Some(input)) = (self.chat.current.clone(), self.chat.composer.clone()) else { return };
         let text = input.read(cx).value();
         let token = token_at_end(&text).map(|(s, q, _)| (s, q.to_string()));
-        self.chat.suggest.clear();
+        self.chat.set_suggest(vec![]);
         match token {
             Some(('/', q)) => {
                 let q = q.to_lowercase();
-                self.chat.suggest = self.chat.options.get(&id).into_iter().flat_map(|o| o.commands.iter())
+                let list = self.chat.options.get(&id).into_iter().flat_map(|o| o.commands.iter())
                     .filter(|(n, _)| n.to_lowercase().contains(&q)).take(8).map(|(n, d)| (format!("/{n}"), d.clone())).collect();
+                self.chat.set_suggest(list);
             }
             Some(('@', q)) => {
                 self.chat.suggest_for = q.clone();
                 self.rpc_reply("chat.files", json!({"chat": id, "query": q, "limit": 8}), move |app, r| {
                     // An older answer never overwrites a newer one.
                     if app.chat.suggest_for != q { return; }
-                    app.chat.suggest = r.ok().iter().flat_map(|v| v["files"].as_array().into_iter().flatten()).filter_map(|f| f.as_str())
+                    let list = r.ok().iter().flat_map(|v| v["files"].as_array().into_iter().flatten()).filter_map(|f| f.as_str())
                         .map(|f| (format!("@{f}"), String::new())).collect();
+                    app.chat.set_suggest(list);
                 });
             }
             _ => {}
@@ -82,7 +84,16 @@ impl DroverApp {
         let (Some(input), Some((label, _))) = (self.chat.composer.clone(), self.chat.suggest.get(i).cloned()) else { return };
         let text = input.read(cx).value();
         if let Some((_, _, start)) = token_at_end(&text) { input.update(cx, |t, cx| t.set_text(&replace_token(&text, start, &format!("{label} ")), cx)); }
-        self.chat.suggest.clear();
+        self.chat.set_suggest(vec![]);
+        cx.notify();
+    }
+
+    /// Up / Down move through the suggestions, Tab or Enter (0) takes the highlighted one.
+    pub fn pick_suggestion(&mut self, delta: i8, cx: &mut Context<Self>) {
+        let n = self.chat.suggest.len();
+        if n == 0 { return; }
+        if delta == 0 { return self.apply_suggestion(self.chat.suggest_sel, cx); }
+        self.chat.suggest_sel = (self.chat.suggest_sel + n).wrapping_add_signed(delta as isize) % n;
         cx.notify();
     }
 
@@ -101,6 +112,20 @@ impl DroverApp {
             None => entries.push(Entry::Head("Loading models…".into())),
         }
         self.open_menu(at, entries, cx);
+    }
+
+    pub fn open_chat_rename(&mut self, id: &str, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        let Some(name) = self.chat.chats.iter().find(|c| c.id == id).map(|c| c.name.clone()) else { return };
+        self.open_picker_with(crate::picker::Kind::RenameChat, ("New name", name), Some(id.to_string()), window, cx);
+    }
+
+    pub fn ask_remove_chat(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(c) = self.chat.chats.iter().find(|c| c.id == id) else { return };
+        self.confirm = Some(crate::actions::Confirm {
+            title: format!("Delete {}?", c.name), detail: "Its messages are removed. Your project files are not touched.".into(),
+            ok: "Delete", then: crate::actions::Then::RemoveChat(c.id.clone()),
+        });
+        cx.notify();
     }
 
     pub fn set_chat_mode(&mut self, mode: &str) {

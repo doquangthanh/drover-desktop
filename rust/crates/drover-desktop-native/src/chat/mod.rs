@@ -36,6 +36,11 @@ pub struct ChatState {
     /// Suggestions under the message box: (what is inserted, a note), and the `@` query they answer.
     pub suggest: Vec<(String, String)>,
     pub suggest_for: String,
+    /// The suggestion being chosen, and whether the message box should send its keys to `pick_suggestion`.
+    pub suggest_sel: usize,
+    /// Pictures pasted into the box, waiting for the next message: (media type, base64).
+    pub images: Vec<(String, String)>,
+    pub suggest_on: std::rc::Rc<std::cell::Cell<bool>>,
 }
 
 impl ChatState {
@@ -69,6 +74,12 @@ impl ChatState {
         }
     }
 
+    pub fn set_suggest(&mut self, list: Vec<(String, String)>) {
+        self.suggest_on.set(!list.is_empty());
+        self.suggest = list;
+        self.suggest_sel = 0;
+    }
+
     pub fn current_chat(&self) -> Option<&Chat> {
         self.current.as_deref().and_then(|id| self.chats.iter().find(|c| c.id == id))
     }
@@ -88,7 +99,8 @@ impl DroverApp {
     /// Show chat `id` and fetch its history the first time.
     pub fn open_chat(&mut self, id: &str) {
         self.chat.current = Some(id.to_string());
-        self.chat.suggest.clear();
+        self.chat.set_suggest(vec![]);
+        self.chat.images.clear();
         self.load_chat_options(id);
         if !self.chat.loaded.contains(id) { self.load_chat_history(id); }
     }

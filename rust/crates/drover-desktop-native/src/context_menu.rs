@@ -21,6 +21,10 @@ pub enum Act {
     NewShell, StartAgent(String), NewSpace, NewSpaceInFolder, NewWorktree, OpenWorktrees,
     // The chat box: the String is a permission mode / a model value (empty = the agent's own).
     ChatMode(String), ChatModel(String),
+    // The chat list's right-click menu: the chat id.
+    ChatRename(String), ChatRemove(String),
+    // The folder picker's machine menu: the alias, empty = this computer.
+    FolderMachine(String),
 }
 
 /// What a menu line shows on its left: a line icon by name, or an agent kind's badge.
@@ -120,6 +124,9 @@ impl DroverApp {
             Act::NewSpaceInFolder => self.open_folder_picker(window, cx),
             Act::ChatMode(m) => self.set_chat_mode(&m),
             Act::ChatModel(m) => self.set_chat_model(&m),
+            Act::ChatRename(id) => self.open_chat_rename(&id, window, cx),
+            Act::ChatRemove(id) => self.ask_remove_chat(&id, cx),
+            Act::FolderMachine(m) => self.folder_machine(Some(m).filter(|m| !m.is_empty()), cx),
             Act::NewWorktree => self.open_picker(Kind::NewWorktree, window, cx),
             Act::OpenWorktrees => self.open_worktrees(),
         }

@@ -1,7 +1,9 @@
 //! The few markdown blocks a chat reply needs, drawn without inline styling: fenced code in a monospace box,
 //! headings (bold), bullets and paragraphs. Inline `code` and **bold** are left as typed.
 
-use gpui::{Div, FontWeight, SharedString, div, prelude::*, rgb};
+use std::ops::Range;
+
+use gpui::{AnyElement, Div, FontWeight, HighlightStyle, SharedString, StyledText, div, prelude::*, rgb};
 
 use crate::theme::{self, fg};
 use crate::ui_scale::px;
@@ -46,13 +48,46 @@ pub fn parse(text: &str) -> Vec<Block> {
     out
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Span { Bold, Code }
+
+/// `**bold**` and `` `code` `` inside a line: the text without the marks, and where each span is. A mark with no
+/// closing partner stays as typed.
+pub fn inline(text: &str) -> (String, Vec<(Range<usize>, Span)>) {
+    let (mut out, mut spans, mut i) = (String::new(), vec![], 0);
+    while i < text.len() {
+        let rest = &text[i..];
+        let marked = rest.strip_prefix("**").map(|r| (r, "**", Span::Bold)).or_else(|| rest.strip_prefix('`').map(|r| (r, "`", Span::Code)));
+        if let Some((r, mark, span)) = marked && let Some(end) = r.find(mark).filter(|e| *e > 0) {
+            let start = out.len();
+            out.push_str(&r[..end]);
+            spans.push((start..out.len(), span));
+            i += mark.len() * 2 + end;
+            continue;
+        }
+        let ch = rest.chars().next().unwrap_or(' ');
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    (out, spans)
+}
+
+fn styled(text: &str) -> AnyElement {
+    let (clean, spans) = inline(text);
+    let highlights = spans.into_iter().map(|(r, s)| (r, match s {
+        Span::Bold => HighlightStyle { font_weight: Some(FontWeight::BOLD), ..Default::default() },
+        Span::Code => HighlightStyle { color: Some(rgb(theme::accent()).into()), background_color: Some(theme::ink(0.07).into()), ..Default::default() },
+    })).collect::<Vec<_>>();
+    StyledText::new(clean).with_highlights(highlights).into_any_element()
+}
+
 pub fn render(text: &str, mono: &SharedString) -> Div {
     let mut col = div().flex().flex_col().gap(px(8.)).text_size(px(13.5)).text_color(rgb(fg())).line_height(px(20.));
     for b in parse(text) {
         col = col.child(match b {
-            Block::Para(t) => div().child(t),
-            Block::Heading(t) => div().font_weight(FontWeight::SEMIBOLD).text_size(px(15.)).child(t),
-            Block::Bullet(t) => div().flex().gap(px(8.)).child(div().flex_none().child("•")).child(div().flex_1().min_w_0().child(t)),
+            Block::Para(t) => div().child(styled(&t)),
+            Block::Heading(t) => div().font_weight(FontWeight::SEMIBOLD).text_size(px(15.)).child(styled(&t)),
+            Block::Bullet(t) => div().flex().gap(px(8.)).child(div().flex_none().child("•")).child(div().flex_1().min_w_0().child(styled(&t))),
             Block::Code(t) => div().p(px(10.)).rounded(px(7.)).bg(theme::ink(0.05)).border_1().border_color(theme::border())
                 .font_family(mono.clone()).text_size(px(12.5)).line_height(px(18.)).child(t),
         });
@@ -72,6 +107,16 @@ mod tests {
             Block::Bullet("one".into()), Block::Bullet("two".into()),
             Block::Code("fn x() {}".into()), Block::Para("after".into()),
         ]);
+    }
+
+    #[test]
+    fn inline_marks() {
+        let (t, s) = inline("use **bold** and `code` here");
+        assert_eq!(t, "use bold and code here");
+        assert_eq!(s, vec![(4..8, Span::Bold), (13..17, Span::Code)]);
+        assert_eq!(inline("2 ** 3 and `open").0, "2 ** 3 and `open");
+        assert_eq!(inline("a ``` b").0, "a ``` b");
+        assert_eq!(inline("é**ü**").1, vec![(2..4, Span::Bold)]);
     }
 
     #[test]
